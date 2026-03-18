@@ -1,0 +1,56 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: pelotonia-dashboard
+  namespace: pelotonia
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: pelotonia-dashboard
+  template:
+    metadata:
+      labels:
+        app: pelotonia-dashboard
+    spec:
+      containers:
+        - name: dashboard
+          image: ${IMAGE}  # replace with your registry path
+          ports:
+            - containerPort: 8080
+          env:
+            - name: PELOTONIA_DB
+              value: /data/pelotonia_data.db
+          volumeMounts:
+            - name: data
+              mountPath: /data
+              readOnly: true
+          resources:
+            requests:
+              memory: 128Mi
+              cpu: 100m
+            limits:
+              memory: 256Mi
+              cpu: 500m
+          livenessProbe:
+            httpGet:
+              path: /api/overview
+              port: 8080
+            initialDelaySeconds: 5
+            periodSeconds: 30
+      volumes:
+        - name: data
+          persistentVolumeClaim:
+            claimName: pelotonia-data
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: pelotonia-dashboard
+  namespace: pelotonia
+spec:
+  selector:
+    app: pelotonia-dashboard
+  ports:
+    - port: 80
+      targetPort: 8080

@@ -1,0 +1,44 @@
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: pelotonia-scraper
+  namespace: pelotonia
+spec:
+  schedule: "0 11 * * *"  # 11:00 UTC / 7am ET daily
+  concurrencyPolicy: Forbid
+  successfulJobsHistoryLimit: 3
+  failedJobsHistoryLimit: 3
+  jobTemplate:
+    spec:
+      backoffLimit: 2
+      activeDeadlineSeconds: 1200
+      template:
+        spec:
+          restartPolicy: OnFailure
+          containers:
+            - name: scraper
+              image: ${IMAGE}  # same image as dashboard
+              command:
+                - /bin/sh
+                - -c
+                - |
+                  python app/org_scraper.py &&
+                  python app/pledgeit_scraper.py &&
+                  python app/pelotonia_scraper.py --incremental
+              env:
+                - name: PELOTONIA_DB
+                  value: /data/pelotonia_data.db
+              volumeMounts:
+                - name: data
+                  mountPath: /data
+              resources:
+                requests:
+                  memory: 128Mi
+                  cpu: 100m
+                limits:
+                  memory: 256Mi
+                  cpu: 500m
+          volumes:
+            - name: data
+              persistentVolumeClaim:
+                claimName: pelotonia-data
