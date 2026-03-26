@@ -146,7 +146,7 @@ def gather_data(weekly=False):
     members_total = conn.execute("SELECT COUNT(*) as cnt FROM members").fetchone()["cnt"]
     high_rollers = conn.execute("SELECT COUNT(*) as cnt FROM members WHERE tags LIKE '%High Roller%'").fetchone()["cnt"]
     survivors = conn.execute("SELECT COUNT(*) as cnt FROM members WHERE is_cancer_survivor=1").fetchone()["cnt"]
-    first_year = conn.execute("""SELECT COUNT(*) as cnt FROM members WHERE tags LIKE '%"1 year"%'""").fetchone()["cnt"]
+    first_year = conn.execute("""SELECT COUNT(*) as cnt FROM members WHERE tags LIKE '%"1 year"%' AND is_rider=1""").fetchone()["cnt"]
 
     commit_row = conn.execute("""
         SELECT COALESCE(SUM(committed_amount),0) as total,
@@ -175,7 +175,7 @@ def gather_data(weekly=False):
                COUNT(DISTINCT m.public_id) as total,
                COALESCE(SUM(m.committed_amount),0) as total_committed,
                COALESCE(SUM(m.raised),0) as total_raised,
-               SUM(CASE WHEN m.tags LIKE '%"1 year"%' THEN 1 ELSE 0 END) as first_year
+               SUM(CASE WHEN m.tags LIKE '%"1 year"%' AND m.is_rider=1 THEN 1 ELSE 0 END) as first_year
         FROM members m
         JOIN teams t ON m.team_id=t.id
         LEFT JOIN (SELECT DISTINCT member_public_id FROM member_routes) mr
@@ -218,12 +218,21 @@ def gather_data(weekly=False):
 
     conn.close()
 
-    # Compute deltas
+    # Compute deltas (per participant type when available, else total members)
     raised_delta = 0
     members_delta = 0
+    riders_delta = 0
+    challengers_delta = 0
+    volunteers_delta = 0
     if snap_today and snap_compare:
         raised_delta = (snap_today["raised"] or 0) - (snap_compare["raised"] or 0)
         members_delta = (snap_today["members_count"] or 0) - (snap_compare["members_count"] or 0)
+        # Only compute per-type deltas if the compare snapshot has the data
+        # (columns were added mid-stream; older snapshots have 0)
+        if (snap_compare["riders_count"] or 0) > 0:
+            riders_delta = (snap_today["riders_count"] or 0) - (snap_compare["riders_count"] or 0)
+            challengers_delta = (snap_today["challengers_count"] or 0) - (snap_compare["challengers_count"] or 0)
+            volunteers_delta = (snap_today["volunteers_count"] or 0) - (snap_compare["volunteers_count"] or 0)
 
     # Campaign day
     now = datetime.now()
@@ -254,6 +263,9 @@ def gather_data(weekly=False):
         "std_committed": commit_row["std"],
         "raised_delta": raised_delta,
         "members_delta": members_delta,
+        "riders_delta": riders_delta,
+        "challengers_delta": challengers_delta,
+        "volunteers_delta": volunteers_delta,
         "teams": [dict(r) for r in team_rows],
         "subteam_deltas": subteam_deltas,
         "campaign_day": campaign_day,
@@ -303,7 +315,7 @@ def build_html(data):
             "goal_val": GOALS["riders"],
             "goal": f"{GOALS['riders']:,}",
             "pct": pct(data["riders"], GOALS["riders"]),
-            "delta": delta_str(data["members_delta"]),
+            "delta": delta_str(data["riders_delta"]),
             "chips": [
                 ("Day", str(data["campaign_day"])),
                 ("To Ride", f"{data['days_to_ride']}d"),
@@ -316,7 +328,7 @@ def build_html(data):
             "goal_val": GOALS["challengers"],
             "goal": f"{GOALS['challengers']:,}",
             "pct": pct(data["challengers"], GOALS["challengers"]),
-            "delta": "",
+            "delta": delta_str(data["challengers_delta"]),
             "chips": [
                 ("Day", str(data["campaign_day"])),
                 ("To Ride", f"{data['days_to_ride']}d"),
@@ -329,7 +341,7 @@ def build_html(data):
             "goal_val": GOALS["volunteers"],
             "goal": f"{GOALS['volunteers']:,}",
             "pct": pct(data["volunteers"], GOALS["volunteers"]),
-            "delta": "",
+            "delta": delta_str(data["volunteers_delta"]),
             "chips": [
                 ("Day", str(data["campaign_day"])),
                 ("To Ride", f"{data['days_to_ride']}d"),
@@ -743,7 +755,9 @@ def build_image(data):
         return ("", True)
 
     dt_raised = _delta_text(data["raised_delta"], is_money=True)
-    dt_members = _delta_text(data["members_delta"])
+    dt_riders = _delta_text(data["riders_delta"])
+    dt_challengers = _delta_text(data["challengers_delta"])
+    dt_volunteers = _delta_text(data["volunteers_delta"])
 
     cards = [
         {
@@ -761,7 +775,7 @@ def build_image(data):
             "current": f"{data['riders']:,}",
             "goal": f"{GOALS['riders']:,}",
             "pct": pct(data["riders"], GOALS["riders"]),
-            "delta_text": dt_members[0], "delta_positive": dt_members[1],
+            "delta_text": dt_riders[0], "delta_positive": dt_riders[1],
             "chips": [("Day", str(data["campaign_day"])),
                       ("To Ride", f"{data['days_to_ride']}d"),
                       ("1st Year", f"{data['first_year']:,}")],
@@ -771,7 +785,7 @@ def build_image(data):
             "current": f"{data['challengers']:,}",
             "goal": f"{GOALS['challengers']:,}",
             "pct": pct(data["challengers"], GOALS["challengers"]),
-            "delta_text": "", "delta_positive": True,
+            "delta_text": dt_challengers[0], "delta_positive": dt_challengers[1],
             "chips": [("Day", str(data["campaign_day"])),
                       ("To Ride", f"{data['days_to_ride']}d"),
                       ("Total", f"{data['members_total']:,}")],
@@ -781,7 +795,7 @@ def build_image(data):
             "current": f"{data['volunteers']:,}",
             "goal": f"{GOALS['volunteers']:,}",
             "pct": pct(data["volunteers"], GOALS["volunteers"]),
-            "delta_text": "", "delta_positive": True,
+            "delta_text": dt_volunteers[0], "delta_positive": dt_volunteers[1],
             "chips": [("Day", str(data["campaign_day"])),
                       ("To Ride", f"{data['days_to_ride']}d"),
                       ("Total", f"{data['members_total']:,}")],

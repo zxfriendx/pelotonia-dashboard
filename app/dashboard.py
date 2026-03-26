@@ -64,7 +64,7 @@ def _get_overview(conn):
     riders = conn.execute("SELECT COUNT(*) as cnt FROM members WHERE is_rider=1").fetchone()["cnt"]
     challengers = conn.execute("SELECT COUNT(*) as cnt FROM members WHERE is_challenger=1").fetchone()["cnt"]
     volunteers = conn.execute("SELECT COUNT(*) as cnt FROM members WHERE is_volunteer=1").fetchone()["cnt"]
-    first_year = conn.execute("""SELECT COUNT(*) as cnt FROM members WHERE tags LIKE '%"1 year"%'""").fetchone()["cnt"]
+    first_year = conn.execute("""SELECT COUNT(*) as cnt FROM members WHERE tags LIKE '%"1 year"%' AND is_rider=1""").fetchone()["cnt"]
     commit_row = conn.execute("""
         SELECT COALESCE(SUM(committed_amount),0) as total,
                COALESCE(SUM(CASE WHEN committed_high_roller=1 THEN committed_amount ELSE 0 END),0) as hr,
@@ -216,7 +216,7 @@ def _get_team_breakdown(conn):
                SUM(m.is_cancer_survivor) as survivors,
                SUM(CASE WHEN m.committed_high_roller=1 THEN m.committed_amount ELSE 0 END) as hr_committed,
                SUM(CASE WHEN m.committed_high_roller=0 THEN m.committed_amount ELSE 0 END) as std_committed,
-               SUM(CASE WHEN m.tags LIKE '%"1 year"%' THEN 1 ELSE 0 END) as first_year
+               SUM(CASE WHEN m.tags LIKE '%"1 year"%' AND m.is_rider=1 THEN 1 ELSE 0 END) as first_year
         FROM members m
         JOIN teams t ON m.team_id=t.id
         LEFT JOIN (SELECT DISTINCT member_public_id FROM member_routes) mr
@@ -382,7 +382,8 @@ def api_route_members(route_id):
 
 def _get_signup_timeline(conn):
     rows = conn.execute("""
-        SELECT snapshot_date, signature_riders, gravel_riders, members_count, raised
+        SELECT snapshot_date, signature_riders, gravel_riders, members_count, raised,
+               riders_count, challengers_count, volunteers_count
         FROM daily_snapshots
         WHERE team_id = ?
         ORDER BY snapshot_date
@@ -3037,14 +3038,26 @@ function renderReport(bundle, period, subteamFilter) {
   });
 
   // Compute deltas — use sub-team snapshot if filtering
-  let raisedDelta = 0, membersDelta = 0;
+  let raisedDelta = 0, membersDelta = 0, ridersDelta = 0, challDelta = 0, volDelta = 0;
   if (!filterAll && moversMap[subteamFilter]) {
     const d = moversMap[subteamFilter];
     raisedDelta = (d.raised_now || 0) - (d.raised_prev || 0);
     membersDelta = (d.members_now || 0) - (d.members_prev || 0);
-  } else if (filterAll) {
-    raisedDelta = today && compare ? (today.raised || 0) - (compare.raised || 0) : 0;
-    membersDelta = today && compare ? (today.members_count || 0) - (compare.members_count || 0) : 0;
+    // Sub-team snapshots don't have per-type counts, use membersDelta as fallback
+    ridersDelta = membersDelta;
+    challDelta = 0;
+    volDelta = 0;
+  } else if (filterAll && today && compare) {
+    raisedDelta = (today.raised || 0) - (compare.raised || 0);
+    membersDelta = (today.members_count || 0) - (compare.members_count || 0);
+    // Per-type deltas (only if compare snapshot has the data)
+    if ((compare.riders_count || 0) > 0) {
+      ridersDelta = (today.riders_count || 0) - (compare.riders_count || 0);
+      challDelta = (today.challengers_count || 0) - (compare.challengers_count || 0);
+      volDelta = (today.volunteers_count || 0) - (compare.volunteers_count || 0);
+    } else {
+      ridersDelta = membersDelta;  // fallback until historical data is populated
+    }
   }
 
   const movers = Object.entries(moversMap)
@@ -3163,7 +3176,7 @@ function renderReport(bundle, period, subteamFilter) {
     // Summary bar
     '<tr><td style="background:#00471F;padding:12px 28px"><table cellpadding="0" cellspacing="0" border="0" width="100%"><tr><td align="center" style="padding:4px 8px"><div style="font-size:20px;font-weight:800;color:#44D62C">' + money(raised) + '</div><div style="font-size:10px;color:rgba(255,255,255,0.5);text-transform:uppercase">Raised ' + deltaHtml(raisedDelta, true) + '</div></td><td align="center" style="padding:4px 8px"><div style="font-size:20px;font-weight:800;color:rgba(255,255,255,0.8)">' + money(goal) + '</div><div style="font-size:10px;color:rgba(255,255,255,0.5);text-transform:uppercase">Goal</div></td><td align="center" style="padding:4px 8px"><div style="font-size:20px;font-weight:800;color:#44D62C">' + membersTotal.toLocaleString() + '</div><div style="font-size:10px;color:rgba(255,255,255,0.5);text-transform:uppercase">Members ' + deltaHtml(membersDelta, false) + '</div></td><td align="center" style="padding:4px 8px"><div style="font-size:20px;font-weight:800;color:#44D62C">' + highRollers + '</div><div style="font-size:10px;color:rgba(255,255,255,0.5);text-transform:uppercase">High Rollers</div></td><td align="center" style="padding:4px 8px"><div style="font-size:20px;font-weight:800;color:#44D62C">' + survivors + '</div><div style="font-size:10px;color:rgba(255,255,255,0.5);text-transform:uppercase">Survivors</div></td><td align="center" style="padding:4px 8px"><div style="font-size:20px;font-weight:800;color:#44D62C">' + firstYear + '</div><div style="font-size:10px;color:rgba(255,255,255,0.5);text-transform:uppercase">1st Year</div></td></tr></table></td></tr>' +
     // Cards
-    '<tr><td style="background:#f4f5f7;padding:16px 12px 0"><table cellpadding="0" cellspacing="0" border="0" width="100%"><tr>' + cardHtml('Funds Raised', money(raised), money(goal), fundsPct, deltaHtml(raisedDelta, true), [['Committed', moneyShort(committed)], ['High Rollers', moneyShort(hrCommitted)], ['Standard', moneyShort(stdCommitted)]]) + cardHtml('Riders', riders.toLocaleString(), ridersGoal.toLocaleString(), ridersPct, deltaHtml(membersDelta, false), [['Day', ''+campaignDay], ['To Ride', daysToRide+'d'], ['Total', membersTotal.toLocaleString()]]) + '</tr><tr><td colspan="2" style="height:8px"></td></tr><tr>' + cardHtml('Challengers', challengers.toLocaleString(), challGoal.toLocaleString(), challPct, '', [['Day', ''+campaignDay], ['To Ride', daysToRide+'d'], ['Total', membersTotal.toLocaleString()]]) + cardHtml('Volunteers', volunteers.toLocaleString(), volGoal.toLocaleString(), volPct, '', [['Day', ''+campaignDay], ['To Ride', daysToRide+'d'], ['Total', membersTotal.toLocaleString()]]) + '</tr></table></td></tr>' +
+    '<tr><td style="background:#f4f5f7;padding:16px 12px 0"><table cellpadding="0" cellspacing="0" border="0" width="100%"><tr>' + cardHtml('Funds Raised', money(raised), money(goal), fundsPct, deltaHtml(raisedDelta, true), [['Committed', moneyShort(committed)], ['High Rollers', moneyShort(hrCommitted)], ['Standard', moneyShort(stdCommitted)]]) + cardHtml('Riders', riders.toLocaleString(), ridersGoal.toLocaleString(), ridersPct, deltaHtml(ridersDelta, false), [['Day', ''+campaignDay], ['To Ride', daysToRide+'d'], ['1st Year', ''+firstYear]]) + '</tr><tr><td colspan="2" style="height:8px"></td></tr><tr>' + cardHtml('Challengers', challengers.toLocaleString(), challGoal.toLocaleString(), challPct, deltaHtml(challDelta, false), [['Day', ''+campaignDay], ['To Ride', daysToRide+'d'], ['Total', membersTotal.toLocaleString()]]) + cardHtml('Volunteers', volunteers.toLocaleString(), volGoal.toLocaleString(), volPct, deltaHtml(volDelta, false), [['Day', ''+campaignDay], ['To Ride', daysToRide+'d'], ['Total', membersTotal.toLocaleString()]]) + '</tr></table></td></tr>' +
     // Movers + Sub-team table
     '<tr><td style="background:#f4f5f7;padding:0 16px 24px">' + moversHtml + teamTableHtml + '</td></tr>' +
     '</table></td></tr></table>';

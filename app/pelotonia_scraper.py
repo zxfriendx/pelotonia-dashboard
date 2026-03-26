@@ -258,6 +258,12 @@ def init_db(db_path=DB_PATH):
         conn.execute("ALTER TABLE daily_snapshots ADD COLUMN gravel_riders INTEGER DEFAULT 0")
     except Exception:
         pass  # column already exists
+    # Migration: add participant type columns for accurate day-over-day deltas
+    for col in ("riders_count", "challengers_count", "volunteers_count"):
+        try:
+            conn.execute(f"ALTER TABLE daily_snapshots ADD COLUMN {col} INTEGER DEFAULT 0")
+        except Exception:
+            pass  # column already exists
 
     # Migration: add goal_override to teams table
     try:
@@ -422,8 +428,8 @@ def scrape_teams(conn):
         """, (
             detail["id"], detail["name"], detail.get("level"),
             detail.get("parent", {}).get("id") if detail.get("parent") else None,
-            detail.get("captain", {}).get("name"),
-            detail.get("captain", {}).get("publicId"),
+            (detail.get("captain") or {}).get("name"),
+            (detail.get("captain") or {}).get("publicId"),
             detail.get("yearsActive"), detail.get("story"),
             1 if detail.get("acceptingNewMembers") else 0,
             detail.get("membersCount"), detail.get("numberOfSubPelotons"),
@@ -784,7 +790,10 @@ def record_daily_snapshot(conn):
         (PARENT_TEAM_ID,),
     ).fetchone()
     if parent:
-        total_members = conn.execute("SELECT COUNT(*) FROM members").fetchone()[0]
+        # Use the API's members_count from the teams table (not COUNT(*) from
+        # the members table) so that the snapshot reflects the real team size
+        # regardless of how many individual profiles have been scraped so far.
+        api_members = int(parent[3] or 0)
         total_donations = conn.execute("SELECT COUNT(*) FROM donations").fetchone()[0]
         total_donated = conn.execute("SELECT COALESCE(SUM(amount),0) FROM donations").fetchone()[0]
         sig_riders = conn.execute(
@@ -793,15 +802,20 @@ def record_daily_snapshot(conn):
         grv_riders = conn.execute(
             "SELECT COUNT(DISTINCT member_public_id) FROM member_routes WHERE ride_type='gravel'"
         ).fetchone()[0]
+        riders_count = conn.execute("SELECT COUNT(*) FROM members WHERE is_rider=1").fetchone()[0]
+        challengers_count = conn.execute("SELECT COUNT(*) FROM members WHERE is_challenger=1").fetchone()[0]
+        volunteers_count = conn.execute("SELECT COUNT(*) FROM members WHERE is_volunteer=1").fetchone()[0]
         conn.execute("""
             INSERT OR REPLACE INTO daily_snapshots
             (snapshot_date, team_id, raised, goal, all_time_raised,
              members_count, donations_count, total_donated,
-             signature_riders, gravel_riders)
-            VALUES (?,?,?,?,?,?,?,?,?,?)
+             signature_riders, gravel_riders,
+             riders_count, challengers_count, volunteers_count)
+            VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)
         """, (today, PARENT_TEAM_ID, parent[0], parent[1], parent[2],
-              total_members, total_donations, total_donated,
-              sig_riders, grv_riders))
+              api_members, total_donations, total_donated,
+              sig_riders, grv_riders,
+              riders_count, challengers_count, volunteers_count))
 
     # Snapshot for each sub-team
     rows = conn.execute(

@@ -95,15 +95,21 @@ def init_db(conn):
 # API
 # ---------------------------------------------------------------------------
 
-def api_get(path):
-    """Fetch JSON from the Pelotonia API."""
+def api_get(path, retries=3):
+    """Fetch JSON from the Pelotonia API with retry logic."""
     url = f"{API_BASE}/{path}"
     req = urllib.request.Request(url, headers={
         "User-Agent": "PelotoniaOrgScraper/1.0",
         "Accept": "application/json",
     })
-    with urllib.request.urlopen(req, timeout=15) as resp:
-        return json.loads(resp.read().decode("utf-8"))
+    for attempt in range(retries):
+        try:
+            with urllib.request.urlopen(req, timeout=15) as resp:
+                return json.loads(resp.read().decode("utf-8"))
+        except Exception:
+            if attempt == retries - 1:
+                raise
+            time.sleep(1 + attempt)  # 1s, 2s backoff
 
 
 def fetch_org(team_id):
@@ -212,8 +218,15 @@ def main():
         if i < total:
             time.sleep(RATE_LIMIT)
 
-    # Store
-    if snapshots:
+    # Store — refuse to save partial results (>20% failure likely means
+    # transient API issue; storing would overwrite good data for today)
+    min_required = int(total * 0.8)
+    if len(snapshots) < min_required:
+        print(f"\nOnly {len(snapshots)}/{total} orgs fetched (need {min_required}). "
+              f"Skipping storage to avoid partial data.", file=sys.stderr)
+        conn.close()
+        sys.exit(1)
+    elif snapshots:
         store_snapshots(conn, snapshots, today, now_iso)
         print(f"\nStored {len(snapshots)} org snapshots for {today}")
     else:
