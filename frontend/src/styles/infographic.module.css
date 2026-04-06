@@ -1,0 +1,290 @@
+/* ── Thermometer cards, stat chips, gradient bars, shimmer ── */
+
+/* Grid */
+.thermoGrid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+  gap: var(--space-xl);
+  padding: var(--space-2xl);
+}
+
+/* Card */
+.thermoCard {
+  background: var(--white);
+  border-radius: 14px;
+  padding: var(--space-2xl);
+  box-shadow: var(--card-shadow);
+  position: relative;
+  overflow: hidden;
+  transition: transform var(--transition-normal);
+}
+
+.thermoCard:hover {
+  transform: translateY(-2px);
+}
+
+.thermoCard::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 3px;
+  background: linear-gradient(90deg, var(--forest), var(--green));
+}
+
+/* Card header */
+.thermoCardHeader {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  margin-bottom: 14px;
+}
+
+.thermoLabel {
+  font-size: var(--font-size-sm);
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 1px;
+  color: var(--color-text-muted);
+}
+
+.pctBadge {
+  font-size: var(--font-size-body);
+  font-weight: 800;
+  padding: 3px 10px;
+  border-radius: var(--radius-pill);
+  background: rgba(68, 214, 44, 0.1);
+  color: var(--forest);
+}
+
+/* Value & goal */
+.thermoValue {
+  font-size: var(--font-size-4xl);
+  font-weight: 800;
+  color: var(--forest);
+  line-height: 1;
+  font-variant-numeric: tabular-nums;
+}
+
+.thermoGoal {
+  font-size: var(--font-size-body);
+  color: var(--color-text-faint);
+  margin-top: 6px;
+}
+
+.thermoGoal strong {
+  color: var(--color-text-secondary);
+}
+
+/* Thick progress bar */
+.thermoBarWrap {
+  margin-top: 18px;
+}
+
+.thermoBarBg {
+  height: 14px;
+  border-radius: 7px;
+  background: #e8ece9;
+  overflow: hidden;
+  position: relative;
+}
+
+.thermoBarFill {
+  height: 100%;
+  border-radius: 7px;
+  background: linear-gradient(90deg, var(--forest) 0%, var(--green) 100%);
+  transition: width 1.8s cubic-bezier(0.25, 0.46, 0.45, 0.94);
+  position: relative;
+}
+
+.thermoBarFill::after {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: -150%;
+  width: 150%;
+  height: 100%;
+  background: linear-gradient(90deg, transparent 0%, rgba(255, 255, 255, 0.3) 50%, transparent 100%);
+  animation: igShimmer 3s 2s infinite;
+}
+
+@keyframes igShimmer {
+  to {
+    left: 150%;
+  }
+}
+
+/* Milestone markers */
+.thermoMilestones {
+  position: relative;
+  height: 18px;
+  margin-top: 4px;
+}
+
+.thermoMilestone {
+  position: absolute;
+  top: 0;
+  font-size: var(--font-size-xs);
+  color: #bbb;
+  text-align: center;
+  transform: translateX(-50%);
+}
+
+.thermoMilestone::before {
+  content: '';
+  display: block;
+  width: 1px;
+  height: 5px;
+  background: var(--color-border);
+  margin: 0 auto 2px;
+}
+
+/* Stat chips row */
+.statChips {
+  display: flex;
+  gap: var(--space-xs);
+  margin-top: 14px;
+}
+
+.statChip {
+  flex: 1;
+  text-align: center;
+  padding: var(--space-sm) var(--space-xs);
+  background: #f7f8f9;
+  border-radius: var(--radius-lg);
+  min-width: 0;
+}
+
+.statChipVal {
+  font-size: 15px;
+  font-weight: 800;
+  color: var(--forest);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.statChipLabel {
+  font-size: var(--font-size-xs);
+  color: #999;
+  text-transform: uppercase;
+  letter-spacing: 0.3px;
+  margin-top: 2px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* Pace indicator */
+.paceRow {
+  margin-top: var(--space-md);
+  font-size: var(--font-size-sm);
+  color: var(--color-text-muted);
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.paceDot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+
+.paceAhead {
+  composes: paceDot;
+  background: var(--green);
+}
+
+.paceBehind {
+  composes: paceDot;
+  background: #e74c3c;
+}
+
+/* Controls bar */
+.infographicControls {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: var(--space-lg) var(--space-2xl);
+}
+
+.infographicSelect {
+  padding: 6px 12px;
+  border: 2px solid var(--forest);
+  border-radius: var(--radius-md);
+  font-size: var(--font-size-md);
+  font-weight: 600;
+  color: var(--forest);
+  background: var(--white);
+  cursor: pointer;
+}
+
+.infographicSelect:focus {
+  outline: none;
+  border-color: var(--green);
+}
+
+/* Summary cards */
+.infographicSummary {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+  gap: var(--space-lg);
+  padding: 0 var(--space-2xl) var(--space-2xl);
+}
+
+.summaryCard {
+  background: var(--white);
+  border-radius: 10px;
+  padding: var(--space-lg);
+  box-shadow: var(--card-shadow);
+  text-align: center;
+}
+
+.summaryValue {
+  font-size: 26px;
+  font-weight: 800;
+  color: var(--forest);
+}
+
+.summaryLabel {
+  font-size: var(--font-size-xs);
+  color: var(--color-text-secondary);
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  margin-top: 4px;
+}
+
+/* ── Mobile (600px) ── */
+@media (max-width: 600px) {
+  .thermoGrid {
+    grid-template-columns: repeat(2, 1fr);
+    gap: var(--space-lg);
+    padding: var(--space-lg);
+  }
+
+  .thermoValue {
+    font-size: var(--font-size-3xl);
+  }
+
+  .statChips {
+    flex-wrap: wrap;
+  }
+
+  .statChip {
+    min-width: 60px;
+  }
+
+  .infographicControls {
+    flex-direction: column;
+    gap: var(--space-md);
+    align-items: stretch;
+    padding: var(--space-md) var(--space-lg);
+  }
+
+  .infographicSummary {
+    padding: 0 var(--space-lg) var(--space-lg);
+  }
+}

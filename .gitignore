@@ -4,4 +4,10 @@ __pycache__/
 *.db
 *.db-journal
 *.db-wal
+*.db-shm
 .DS_Store
+.ticker_cache.json
+
+# Frontend
+node_modules/
+frontend/dist/

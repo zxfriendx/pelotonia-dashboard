@@ -1,0 +1,202 @@
+/* ── Goals panel (dark brand panel), editable targets ── */
+
+.goalsPanel {
+  background: var(--black);
+  border-radius: var(--radius-xl);
+  padding: 32px 40px;
+  position: relative;
+  overflow: visible;
+}
+
+.goalsTitle {
+  font-size: 30px;
+  font-weight: 900;
+  color: var(--white);
+  letter-spacing: 3px;
+  margin-bottom: 28px;
+  position: relative;
+  z-index: 1;
+}
+
+.goalsTitle sup {
+  font-size: var(--font-size-sm);
+  vertical-align: super;
+}
+
+.goalsAsOf {
+  float: right;
+  font-size: var(--font-size-sm);
+  font-weight: 400;
+  letter-spacing: 0.5px;
+  color: rgba(255, 255, 255, 0.35);
+  padding-top: 10px;
+}
+
+/* Goal row */
+.goalRow {
+  display: grid;
+  grid-template-columns: 200px 1fr 120px;
+  align-items: center;
+  margin-bottom: 22px;
+  position: relative;
+  z-index: 1;
+  gap: var(--space-lg);
+  overflow: visible;
+}
+
+.goalRowLabel {
+  color: var(--green);
+  font-weight: 800;
+  font-size: var(--font-size-md);
+  text-transform: uppercase;
+  letter-spacing: 1.5px;
+  text-align: right;
+  white-space: nowrap;
+}
+
+/* Bar */
+.goalBarWrap {
+  position: relative;
+  height: 40px;
+  display: flex;
+  align-items: center;
+  overflow: visible;
+  margin-left: 40px;
+}
+
+.goalBarLine {
+  position: absolute;
+  top: 50%;
+  left: 0;
+  right: 0;
+  height: 2px;
+  background: rgba(68, 214, 44, 0.25);
+  transform: translateY(-50%);
+}
+
+.goalBarFillLine {
+  position: absolute;
+  top: 50%;
+  left: 0;
+  height: 2px;
+  background: var(--green);
+  transform: translateY(-50%);
+  transition: width 1.2s ease-out;
+  z-index: 1;
+}
+
+/* Arrow marker */
+.goalArrowWrap {
+  position: absolute;
+  top: 50%;
+  transform: translate(-12px, -50%);
+  transition: left 1.2s ease-out;
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  white-space: nowrap;
+  z-index: 2;
+}
+
+/* When progress > 80%, flip arrow and label to the left */
+.goalArrowFlipped {
+  flex-direction: row-reverse;
+  transform: translate(-100%, -50%);
+}
+
+.goalArrowFlipped .goalArrowImg {
+  transform: scaleX(-1);
+}
+
+.goalArrowImg {
+  display: block;
+  width: 48px;
+  height: auto;
+  flex-shrink: 0;
+  filter: drop-shadow(0 0 6px rgba(68, 214, 44, 0.4));
+}
+
+.goalArrowWrap img,
+.goalArrowSvg {
+  display: block;
+  width: 24px;
+  height: auto;
+  flex-shrink: 0;
+  filter: drop-shadow(0 0 6px rgba(68, 214, 44, 0.4));
+}
+
+.goalCurrentVal {
+  color: var(--white);
+  font-weight: 800;
+  font-size: var(--font-size-lg);
+  text-shadow: 0 0 8px rgba(68, 214, 44, 0.5);
+  letter-spacing: 0.5px;
+}
+
+.goalTarget {
+  color: var(--green);
+  font-weight: 700;
+  font-size: var(--font-size-xl);
+  text-align: right;
+  letter-spacing: 1px;
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+/* Scale row */
+.goalsScaleRow {
+  margin-bottom: 0 !important;
+  border-top: 1px solid rgba(68, 214, 44, 0.15);
+  padding-top: var(--space-md);
+  margin-top: var(--space-xs);
+}
+
+.goalsPctLabel {
+  color: rgba(68, 214, 44, 0.4) !important;
+  font-size: var(--font-size-sm) !important;
+  font-weight: 600 !important;
+  letter-spacing: 1px !important;
+}
+
+.goalsScaleTicks {
+  display: flex;
+  justify-content: space-between;
+  color: rgba(68, 214, 44, 0.4);
+  font-size: var(--font-size-sm);
+  font-weight: 600;
+  letter-spacing: 1px;
+  margin-left: 40px;
+}
+
+.goalsScaleGoalLabel {
+  color: rgba(68, 214, 44, 0.4);
+  font-weight: 800;
+  font-size: var(--font-size-sm);
+  text-align: right;
+  letter-spacing: 1px;
+}
+
+/* ── Tablet (768px) ── */
+@media (max-width: 768px) {
+  .goalsPanel {
+    padding: var(--space-xl) var(--space-lg);
+  }
+
+  .goalRow {
+    grid-template-columns: 120px 1fr 80px;
+    gap: var(--space-sm);
+  }
+
+  .goalRowLabel {
+    font-size: var(--font-size-sm);
+    letter-spacing: 1px;
+  }
+
+  .goalTarget {
+    font-size: var(--font-size-md);
+  }
+
+  .goalsTitle {
+    font-size: var(--font-size-2xl);
+  }
+}

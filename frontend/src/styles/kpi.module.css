@@ -1,0 +1,113 @@
+/* ── KPI strip & flip card animations ── */
+
+.kpiStrip {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  gap: var(--space-md);
+  padding: var(--space-lg) var(--space-2xl);
+}
+
+.kpi {
+  background: var(--white);
+  border-radius: var(--radius-lg);
+  padding: var(--space-lg);
+  box-shadow: var(--card-shadow);
+  text-align: center;
+}
+
+.value {
+  font-size: var(--font-size-3xl);
+  font-weight: 800;
+  color: var(--forest);
+}
+
+.label {
+  font-size: var(--font-size-sm);
+  color: var(--color-text-secondary);
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+/* Flip card */
+.kpiFlip {
+  composes: kpi;
+  cursor: pointer;
+  perspective: 600px;
+  position: relative;
+}
+
+.kpiInner {
+  position: relative;
+  width: 100%;
+  min-height: 72px;
+  transition: transform var(--transition-slow);
+  transform-style: preserve-3d;
+}
+
+.flipped .kpiInner {
+  transform: rotateY(180deg);
+}
+
+.kpiFront,
+.kpiBack {
+  position: absolute;
+  inset: 0;
+  backface-visibility: hidden;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  align-items: center;
+}
+
+.kpiBack {
+  transform: rotateY(180deg);
+}
+
+.kpiBack .label {
+  font-size: var(--font-size-sm);
+}
+
+.kpiShare {
+  font-size: var(--font-size-sm);
+  color: var(--green);
+  font-weight: 700;
+  margin-top: 2px;
+}
+
+.kpiFlipHint {
+  position: absolute;
+  top: 4px;
+  right: 6px;
+  font-size: 9px;
+  color: #bbb;
+  pointer-events: none;
+}
+
+/* ── Mobile (600px) ── */
+@media (max-width: 600px) {
+  .kpiStrip {
+    grid-template-columns: repeat(2, 1fr);
+    gap: var(--space-sm);
+    padding: var(--space-md) var(--space-lg);
+  }
+
+  .kpi {
+    padding: 10px;
+  }
+
+  .value {
+    font-size: var(--font-size-xl);
+  }
+
+  .label {
+    font-size: var(--font-size-xs);
+  }
+
+  .kpiInner {
+    min-height: 60px;
+  }
+
+  .kpiBack .value {
+    font-size: var(--font-size-xl);
+  }
+}

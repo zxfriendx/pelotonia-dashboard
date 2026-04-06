@@ -1,0 +1,67 @@
+/* ── Brand tokens & design system ── */
+:root {
+  /* Brand colors */
+  --green: #44D62C;
+  --forest: #00471F;
+  --black: #0E1411;
+  --tread: #29322D;
+  --white: #FFFFFF;
+
+  /* Surfaces */
+  --gray-bg: #f5f6f7;
+  --card-shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
+
+  /* Semantic */
+  --color-text-primary: var(--black);
+  --color-text-secondary: #666;
+  --color-text-muted: #888;
+  --color-text-faint: #aaa;
+  --color-border: #ddd;
+  --color-border-light: #eee;
+  --color-hover-bg: #f0faf0;
+  --color-hover-bg-strong: #e8f5e9;
+  --color-highlight-bg: #c8e6c9;
+
+  /* Badge colors */
+  --badge-survivor-bg: #fff3e0;
+  --badge-survivor-text: #e65100;
+  --badge-first-year-bg: #ff9800;
+  --badge-tag-bg: #e8f5e9;
+
+  /* Spacing */
+  --space-xs: 4px;
+  --space-sm: 8px;
+  --space-md: 12px;
+  --space-lg: 16px;
+  --space-xl: 20px;
+  --space-2xl: 24px;
+
+  /* Radii */
+  --radius-sm: 4px;
+  --radius-md: 6px;
+  --radius-lg: 8px;
+  --radius-xl: 12px;
+  --radius-pill: 20px;
+
+  /* Typography */
+  --font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  --font-size-xs: 10px;
+  --font-size-sm: 11px;
+  --font-size-body: 13px;
+  --font-size-md: 14px;
+  --font-size-lg: 16px;
+  --font-size-xl: 18px;
+  --font-size-2xl: 22px;
+  --font-size-3xl: 28px;
+  --font-size-4xl: 36px;
+
+  /* Breakpoints (for reference — used in media queries) */
+  /* --bp-desktop: 900px */
+  /* --bp-tablet: 768px */
+  /* --bp-mobile: 600px */
+
+  /* Transitions */
+  --transition-fast: 0.15s ease;
+  --transition-normal: 0.2s ease;
+  --transition-slow: 0.5s ease;
+}

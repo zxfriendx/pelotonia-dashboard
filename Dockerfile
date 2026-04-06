@@ -1,10 +1,19 @@
-FROM python:3.12-slim
+# Stage 1: Build React frontend
+FROM node:20-slim AS frontend-build
+WORKDIR /frontend
+COPY frontend/package.json frontend/package-lock.json ./
+RUN npm ci
+COPY frontend/ ./
+RUN npm run build
 
+# Stage 2: Python runtime
+FROM python:3.12-slim
 WORKDIR /app
 
 RUN pip install --no-cache-dir flask requests pillow
 
 COPY app/ app/
+COPY --from=frontend-build /frontend/dist frontend/dist/
 
 # GCP Cloud Run: DB is baked into the image (copied above from app/)
 # K8s: DB lives on a PersistentVolume, set PELOTONIA_DB=/data/pelotonia_data.db

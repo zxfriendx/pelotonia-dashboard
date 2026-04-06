@@ -1,0 +1,166 @@
+/* ── Global reset & base styles ── */
+@import './variables.css';
+
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+}
+
+body {
+  font-family: var(--font-family);
+  background: var(--gray-bg);
+  color: var(--color-text-primary);
+  line-height: 1.5;
+}
+
+/* Utility classes */
+.text-right {
+  text-align: right;
+}
+
+.text-center {
+  text-align: center;
+}
+
+/* Search bar */
+.search-bar {
+  width: 100%;
+  padding: var(--space-sm) var(--space-md);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  font-size: var(--font-size-md);
+  margin-bottom: var(--space-md);
+}
+
+.search-bar:focus {
+  outline: none;
+  border-color: var(--green);
+  box-shadow: 0 0 0 2px rgba(68, 214, 44, 0.2);
+}
+
+/* CSV export button */
+.btn-export {
+  padding: 6px 14px;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  background: var(--white);
+  cursor: pointer;
+  font-size: var(--font-size-sm);
+  font-weight: 600;
+  color: #555;
+  white-space: nowrap;
+  transition: all var(--transition-fast);
+}
+
+.btn-export:hover {
+  background: var(--forest);
+  color: var(--white);
+  border-color: var(--forest);
+}
+
+/* Progress bar */
+.progress-wrap {
+  padding: 0 var(--space-2xl) var(--space-sm);
+}
+
+.progress-outer {
+  background: #e0e0e0;
+  border-radius: var(--radius-lg);
+  height: 24px;
+  overflow: hidden;
+  position: relative;
+}
+
+.progress-inner {
+  background: linear-gradient(90deg, var(--green), #44D62C);
+  height: 100%;
+  border-radius: var(--radius-lg);
+  transition: width 0.6s;
+}
+
+.progress-label {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  font-size: var(--font-size-sm);
+  font-weight: 700;
+  color: var(--forest);
+}
+
+/* Pagination */
+.pagination {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: var(--space-md) 0 var(--space-xs);
+  font-size: var(--font-size-body);
+  color: var(--color-text-secondary);
+  border-top: 1px solid var(--color-border-light);
+  margin-top: var(--space-sm);
+}
+
+.pagination button {
+  padding: 6px 14px;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  background: var(--white);
+  cursor: pointer;
+  font-size: var(--font-size-body);
+  color: var(--forest);
+  transition: all var(--transition-fast);
+}
+
+.pagination button:hover:not(:disabled) {
+  background: var(--green);
+  color: var(--white);
+  border-color: var(--green);
+}
+
+.pagination button:disabled {
+  opacity: 0.4;
+  cursor: default;
+}
+
+.pagination .page-info {
+  font-weight: 600;
+}
+
+.pagination .page-size-wrap {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.pagination .page-size-wrap select {
+  padding: 4px 8px;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-sm);
+  font-size: var(--font-size-sm);
+  background: var(--white);
+}
+
+/* Highlight animation */
+@keyframes fadeHighlight {
+  from {
+    background: var(--color-highlight-bg);
+  }
+  to {
+    background: transparent;
+  }
+}
+
+/* Mobile: search zoom prevention */
+@media (max-width: 600px) {
+  .search-bar {
+    font-size: 16px;
+  }
+
+  button,
+  select {
+    min-height: 44px;
+  }
+}

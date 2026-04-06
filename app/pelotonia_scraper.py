@@ -66,8 +66,9 @@ log = logging.getLogger("pelotonia_scraper")
 # ---------------------------------------------------------------------------
 def init_db(db_path=DB_PATH):
     """Create/upgrade the SQLite database schema."""
-    conn = sqlite3.connect(str(db_path))
+    conn = sqlite3.connect(str(db_path), timeout=30)
     conn.execute("PRAGMA journal_mode=WAL")
+    conn.execute("PRAGMA busy_timeout=30000")
     conn.execute("PRAGMA foreign_keys=ON")
 
     conn.executescript("""

@@ -2,3 +2,13 @@
 .venv
 __pycache__
 *.pyc
+*.db-journal
+*.db-wal
+*.db-shm
+.DS_Store
+.ticker_cache.json
+node_modules/
+frontend/dist/
+tests/
+k8s/
+scraper.log

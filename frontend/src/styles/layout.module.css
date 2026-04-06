@@ -1,0 +1,126 @@
+/* ── Header, footer, grid layout, card base ── */
+
+/* Header */
+.header {
+  background: var(--forest);
+  color: var(--white);
+  padding: var(--space-xl) var(--space-2xl);
+  display: flex;
+  align-items: center;
+  gap: var(--space-lg);
+}
+
+.headerTitle {
+  font-size: var(--font-size-2xl);
+  font-weight: 700;
+}
+
+.headerBadge {
+  background: var(--green);
+  color: var(--forest);
+  padding: 3px 10px;
+  border-radius: var(--radius-xl);
+  font-size: var(--font-size-sm);
+  font-weight: 700;
+}
+
+.headerUpdated {
+  margin-left: auto;
+  font-size: var(--font-size-sm);
+  opacity: 0.7;
+}
+
+/* Grid layout */
+.grid {
+  display: grid;
+  gap: var(--space-lg);
+  padding: var(--space-lg) var(--space-2xl);
+}
+
+.grid2 {
+  composes: grid;
+  grid-template-columns: 1fr 1fr;
+}
+
+.grid3 {
+  composes: grid;
+  grid-template-columns: 1fr 1fr 1fr;
+}
+
+/* Card */
+.card {
+  background: var(--white);
+  border-radius: var(--radius-lg);
+  padding: var(--space-xl);
+  box-shadow: var(--card-shadow);
+  min-width: 0;
+  overflow: hidden;
+}
+
+.cardTitle {
+  font-size: var(--font-size-lg);
+  font-weight: 700;
+  color: var(--forest);
+  margin-bottom: var(--space-md);
+  border-bottom: 2px solid var(--green);
+  padding-bottom: 6px;
+}
+
+/* Footer */
+.footer {
+  text-align: center;
+  padding: var(--space-xl);
+  font-size: var(--font-size-sm);
+  color: var(--color-text-muted);
+}
+
+/* Guide button */
+.guideBtn {
+  background: none;
+  border: 1px solid rgba(255, 255, 255, 0.3);
+  color: var(--white);
+  padding: 4px 10px;
+  border-radius: var(--radius-md);
+  font-size: var(--font-size-sm);
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.guideBtn:hover {
+  border-color: var(--green);
+  color: var(--green);
+}
+
+/* ── Desktop collapse (900px) ── */
+@media (max-width: 900px) {
+  .grid2,
+  .grid3 {
+    grid-template-columns: 1fr;
+  }
+}
+
+/* ── Mobile (600px) ── */
+@media (max-width: 600px) {
+  .header {
+    flex-wrap: wrap;
+    padding: var(--space-lg);
+    gap: var(--space-sm);
+  }
+
+  .headerTitle {
+    width: 100%;
+    font-size: var(--font-size-xl);
+  }
+
+  .headerUpdated {
+    margin-left: auto;
+  }
+
+  .grid {
+    padding: var(--space-md) var(--space-lg);
+  }
+
+  .card {
+    overflow-x: auto;
+  }
+}

@@ -1,0 +1,23 @@
+/* ── Chart container sizing & responsive constraints ── */
+
+.chartContainer {
+  position: relative;
+  height: 300px;
+  max-width: 100%;
+}
+
+.chartContainerTall {
+  composes: chartContainer;
+  height: 450px;
+}
+
+/* ── Mobile (600px) ── */
+@media (max-width: 600px) {
+  .chartContainer {
+    height: 250px;
+  }
+
+  .chartContainerTall {
+    height: 300px;
+  }
+}

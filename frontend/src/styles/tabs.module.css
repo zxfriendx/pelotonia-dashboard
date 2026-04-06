@@ -1,0 +1,77 @@
+/* ── Tab bar, active states, scrollable on mobile ── */
+
+.tabs {
+  display: flex;
+  gap: 0;
+  border-bottom: 2px solid var(--color-border);
+  margin-bottom: var(--space-lg);
+}
+
+.tab {
+  padding: var(--space-sm) var(--space-lg);
+  cursor: pointer;
+  font-size: var(--font-size-body);
+  font-weight: 600;
+  color: var(--color-text-muted);
+  border-bottom: 2px solid transparent;
+  margin-bottom: -2px;
+  background: none;
+  border-top: none;
+  border-left: none;
+  border-right: none;
+  white-space: nowrap;
+  transition: color var(--transition-fast), border-color var(--transition-fast);
+}
+
+.tab:hover {
+  color: var(--forest);
+}
+
+.active {
+  color: var(--forest);
+  border-bottom-color: var(--green);
+}
+
+.tabContent {
+  display: none;
+}
+
+.tabContentActive {
+  display: block;
+}
+
+.tabsWrap {
+  padding: 0 var(--space-2xl);
+}
+
+/* ── Tablet (768px) — scrollable tab bar ── */
+@media (max-width: 768px) {
+  .tabs {
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+    scroll-snap-type: x mandatory;
+    scrollbar-width: none;
+  }
+
+  .tabs::-webkit-scrollbar {
+    display: none;
+  }
+
+  .tab {
+    flex-shrink: 0;
+    scroll-snap-align: start;
+  }
+}
+
+/* ── Mobile (600px) — bigger touch targets ── */
+@media (max-width: 600px) {
+  .tabsWrap {
+    padding: 0 var(--space-lg) !important;
+  }
+
+  .tab {
+    min-height: 44px;
+    display: flex;
+    align-items: center;
+  }
+}
