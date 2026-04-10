@@ -109,11 +109,9 @@ Data is sourced from the Pelotonia API, PledgeIt campaign page, and organization
 - **Backend restart**: Kill Flask process and re-run `app/.venv/bin/python app/dashboard.py --port 5050`
 
 ### Local Cron Jobs
-Scrapers run daily at 7am ET (11:00 UTC) via crontab:
+Scrapers run 3× daily at 7am, 1pm, 7pm ET (11:00, 17:00, 23:00 UTC). Scrape and GCP deploy are chained in a single cron entry so the deploy waits for the scraper's atomic commit before packaging the SQLite DB into the container image (previously the deploy fired on a fixed timer and often bundled stale data).
 ```
-0  11 * * * cd /home/zabx/source/pelotonia-dashboard && app/.venv/bin/python app/pelotonia_scraper.py --incremental >> scraper.log 2>&1
-5  11 * * * cd /home/zabx/source/pelotonia-dashboard && app/.venv/bin/python app/pledgeit_scraper.py >> scraper.log 2>&1
-10 11 * * * cd /home/zabx/source/pelotonia-dashboard && app/.venv/bin/python app/org_scraper.py >> scraper.log 2>&1
+0 11,17,23 * * * cd /home/zabx/source/pelotonia-dashboard && export PATH="$HOME/google-cloud-sdk/bin:$PATH" && app/.venv/bin/python app/pelotonia_scraper.py --incremental && app/.venv/bin/python app/pledgeit_scraper.py && app/.venv/bin/python app/org_scraper.py && bash deploy-gcp.sh >> scraper.log 2>&1
 ```
 
 ### Kubernetes

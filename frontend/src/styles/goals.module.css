@@ -102,10 +102,7 @@
 .goalArrowFlipped {
   flex-direction: row-reverse;
   transform: translate(-100%, -50%);
-}
-
-.goalArrowFlipped .goalArrowImg {
-  transform: scaleX(-1);
+  gap: 8px;
 }
 
 .goalArrowImg {
@@ -183,7 +180,7 @@
   }
 
   .goalRow {
-    grid-template-columns: 120px 1fr 80px;
+    grid-template-columns: 110px 1fr 90px;
     gap: var(--space-sm);
   }
 
@@ -192,11 +189,91 @@
     letter-spacing: 1px;
   }
 
+  .goalBarWrap {
+    margin-left: 16px;
+  }
+
+  .goalArrowImg {
+    width: 32px;
+  }
+
+  .goalCurrentVal {
+    font-size: var(--font-size-sm);
+    letter-spacing: 0;
+  }
+
   .goalTarget {
-    font-size: var(--font-size-md);
+    font-size: var(--font-size-sm);
+    letter-spacing: 0;
+  }
+
+  .goalsScaleTicks {
+    margin-left: 16px;
+    font-size: 10px;
+  }
+
+  .goalsPctLabel {
+    font-size: 10px !important;
+  }
+
+  .goalsScaleGoalLabel {
+    font-size: 10px;
   }
 
   .goalsTitle {
     font-size: var(--font-size-2xl);
+  }
+
+  .goalsAsOf {
+    float: none;
+    display: block;
+    padding-top: 4px;
+  }
+}
+
+/* ── Small mobile (600px) ── */
+@media (max-width: 600px) {
+  .goalsPanel {
+    padding: var(--space-lg) var(--space-md);
+  }
+
+  .goalRow {
+    grid-template-columns: 70px 1fr 70px;
+    gap: 6px;
+    margin-bottom: 16px;
+  }
+
+  .goalRowLabel {
+    font-size: 10px;
+    letter-spacing: 0.5px;
+  }
+
+  .goalBarWrap {
+    height: 32px;
+    margin-left: 8px;
+  }
+
+  .goalArrowImg {
+    width: 24px;
+  }
+
+  .goalCurrentVal {
+    font-size: 11px;
+    font-weight: 700;
+  }
+
+  .goalTarget {
+    font-size: 11px;
+    font-weight: 700;
+  }
+
+  .goalsScaleTicks {
+    margin-left: 8px;
+  }
+
+  .goalsTitle {
+    font-size: var(--font-size-xl);
+    letter-spacing: 1.5px;
+    margin-bottom: 16px;
   }
 }
