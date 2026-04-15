@@ -156,6 +156,10 @@ export interface DonorSummary {
   donor: string;
   total: number;
   cnt: number;
+  recipient_count: number;
+  last_donation: string | null;
+  first_donation: string | null;
+  affiliations: string | null;
 }
 
 export interface CompanySummary {

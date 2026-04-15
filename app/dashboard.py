@@ -415,11 +415,25 @@ def api_events():
 
 def _get_top_donors(conn):
     rows = conn.execute("""
-        SELECT COALESCE(recognition_name, donor_name, 'Anonymous') as donor,
-               SUM(amount) as total, COUNT(*) as cnt
+        SELECT
+            COALESCE(NULLIF(donor_name, ''), recognition_name, 'Anonymous') as donor,
+            SUM(amount) as total,
+            COUNT(*) as cnt,
+            COUNT(DISTINCT recipient_public_id) as recipient_count,
+            MAX(date) as last_donation,
+            MIN(date) as first_donation,
+            CASE
+                WHEN COALESCE(NULLIF(donor_name, ''), recognition_name, 'Anonymous') = 'Anonymous'
+                    THEN NULL
+                ELSE GROUP_CONCAT(DISTINCT CASE
+                    WHEN recognition_name IS NOT NULL
+                     AND recognition_name != ''
+                     AND recognition_name != COALESCE(donor_name, '')
+                    THEN recognition_name END)
+            END as affiliations
         FROM donations
-        GROUP BY COALESCE(recognition_name, donor_name)
-        ORDER BY SUM(amount) DESC LIMIT 25
+        GROUP BY COALESCE(NULLIF(donor_name, ''), recognition_name, 'Anonymous')
+        ORDER BY SUM(amount) DESC
     """).fetchall()
     return [dict(r) for r in rows]
 

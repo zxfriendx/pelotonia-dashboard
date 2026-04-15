@@ -25,9 +25,9 @@ export function DonorRecipientsModal({ donorName, onClose }: Props) {
   const groups = useMemo(() => {
     if (!isOpen || !donorName) return [];
     const donorDons = donations.filter((d) => {
-      const name = d.anonymous_to_public
-        ? (d.recognition_name || 'Anonymous')
-        : (d.donor_name || d.recognition_name || '');
+      const name = (d.donor_name && d.donor_name.trim())
+        ? d.donor_name
+        : (d.recognition_name && d.recognition_name.trim() ? d.recognition_name : 'Anonymous');
       return name === donorName;
     });
     const map = new Map<string, RecipientGroup>();
