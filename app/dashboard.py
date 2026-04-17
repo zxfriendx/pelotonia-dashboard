@@ -13,47 +13,46 @@ Usage:
   python dashboard.py              # Start on port 5050
   python dashboard.py --port 8080  # Custom port
 
-Requires: flask, sqlite3 (stdlib)
-Database: pelotonia_data.db (created by pelotonia_scraper.py)
+Requires: flask, psycopg, cachetools
+Database: AlloyDB (Postgres) via ALLOYDB_DSN env var
 """
 
 import argparse
 import json
 import os
-import sqlite3
+import time
 import urllib.request
 from pathlib import Path
 
+from cachetools import TTLCache
 from flask import Flask, jsonify, Response, send_from_directory
 
+from db import get_conn
+
 SCRIPT_DIR = Path(__file__).resolve().parent
-DB_PATH = Path(os.environ.get("PELOTONIA_DB", SCRIPT_DIR / "pelotonia_data.db"))
 PARENT_TEAM_ID = "a0s3t00000BKX8sAAH"
 
 app = Flask(__name__)
 
-# mtime-based cache — rebuilt only when the DB file is modified (i.e., after scraper runs)
-_cache = {"data": None, "db_mtime": 0}
+_cache = TTLCache(maxsize=1, ttl=30)
 
 
 def get_db():
-    conn = sqlite3.connect(str(DB_PATH))
-    conn.row_factory = sqlite3.Row
-    return conn
+    return get_conn().__enter__()
 
 
 # ── JSON API ──────────────────────────────────────────────────────────────
 
 def _get_overview(conn):
     parent = conn.execute(
-        "SELECT name, raised, COALESCE(goal_override, goal) as goal, all_time_raised, members_count, general_peloton_funds FROM teams WHERE id=?",
+        "SELECT name, raised, COALESCE(goal_override, goal) as goal, all_time_raised, members_count, general_peloton_funds FROM teams WHERE id=%s",
         (PARENT_TEAM_ID,),
     ).fetchone()
     members = conn.execute("SELECT COUNT(*) as cnt FROM members").fetchone()["cnt"]
     donations = conn.execute("SELECT COUNT(*) as cnt FROM donations").fetchone()["cnt"]
     total_donated = conn.execute("SELECT COALESCE(SUM(amount),0) as s FROM donations").fetchone()["s"]
-    survivors = conn.execute("SELECT COUNT(*) as cnt FROM members WHERE is_cancer_survivor=1").fetchone()["cnt"]
-    high_rollers = conn.execute("SELECT COUNT(*) as cnt FROM members WHERE tags LIKE '%High Roller%'").fetchone()["cnt"]
+    survivors = conn.execute("SELECT COUNT(*) as cnt FROM members WHERE is_cancer_survivor=true").fetchone()["cnt"]
+    high_rollers = conn.execute("SELECT COUNT(*) as cnt FROM members WHERE tags LIKE '%%High Roller%%'").fetchone()["cnt"]
     last_scraped = conn.execute("SELECT MAX(last_scraped) as ls FROM members").fetchone()["ls"]
     sig_riders = conn.execute(
         "SELECT COUNT(DISTINCT member_public_id) as cnt FROM member_routes WHERE ride_type='signature'"
@@ -61,16 +60,17 @@ def _get_overview(conn):
     grv_riders = conn.execute(
         "SELECT COUNT(DISTINCT member_public_id) as cnt FROM member_routes WHERE ride_type='gravel'"
     ).fetchone()["cnt"]
-    riders = conn.execute("SELECT COUNT(*) as cnt FROM members WHERE is_rider=1").fetchone()["cnt"]
-    challengers = conn.execute("SELECT COUNT(*) as cnt FROM members WHERE is_challenger=1").fetchone()["cnt"]
-    volunteers = conn.execute("SELECT COUNT(*) as cnt FROM members WHERE is_volunteer=1").fetchone()["cnt"]
-    first_year = conn.execute("""SELECT COUNT(*) as cnt FROM members WHERE tags LIKE '%"1 year"%' AND is_rider=1""").fetchone()["cnt"]
+    riders = conn.execute("SELECT COUNT(*) as cnt FROM members WHERE is_rider=true").fetchone()["cnt"]
+    challengers = conn.execute("SELECT COUNT(*) as cnt FROM members WHERE is_challenger=true").fetchone()["cnt"]
+    volunteers = conn.execute("SELECT COUNT(*) as cnt FROM members WHERE is_volunteer=true").fetchone()["cnt"]
+    first_year = conn.execute("""SELECT COUNT(*) as cnt FROM members WHERE tags LIKE '%%"1 year"%%' AND is_rider=true""").fetchone()["cnt"]
     commit_row = conn.execute("""
         SELECT COALESCE(SUM(committed_amount),0) as total,
-               COALESCE(SUM(CASE WHEN committed_high_roller=1 THEN committed_amount ELSE 0 END),0) as hr,
-               COALESCE(SUM(CASE WHEN committed_high_roller=0 THEN committed_amount ELSE 0 END),0) as std
+               COALESCE(SUM(CASE WHEN committed_high_roller=true THEN committed_amount ELSE 0 END),0) as hr,
+               COALESCE(SUM(CASE WHEN committed_high_roller=false THEN committed_amount ELSE 0 END),0) as std
         FROM members WHERE team_id IS NOT NULL
     """).fetchone()
+    last_scraped_str = last_scraped.isoformat() if last_scraped else None
     return {
         "team_name": parent["name"] if parent else "Team Huntington Bank",
         "raised": parent["raised"] if parent else 0,
@@ -91,22 +91,21 @@ def _get_overview(conn):
         "std_committed": commit_row["std"],
         "general_peloton_funds": parent["general_peloton_funds"] if parent else 0,
         "first_year": first_year,
-        "last_scraped": last_scraped,
+        "last_scraped": last_scraped_str,
     }
 
 
 @app.route("/api/overview")
 def api_overview():
-    conn = get_db()
-    data = _get_overview(conn)
-    conn.close()
+    with get_conn() as conn:
+        data = _get_overview(conn)
     return jsonify(data)
 
 
 def _get_teams(conn):
     rows = conn.execute(
         "SELECT id, name, raised, COALESCE(goal_override, goal) as goal, all_time_raised, members_count "
-        "FROM teams WHERE parent_id=? ORDER BY raised DESC",
+        "FROM teams WHERE parent_id=%s ORDER BY raised DESC",
         (PARENT_TEAM_ID,),
     ).fetchall()
     return [dict(r) for r in rows]
@@ -114,17 +113,16 @@ def _get_teams(conn):
 
 @app.route("/api/teams")
 def api_teams():
-    conn = get_db()
-    data = _get_teams(conn)
-    conn.close()
+    with get_conn() as conn:
+        data = _get_teams(conn)
     return jsonify(data)
 
 
 def _get_fundraising_timeline(conn):
     rows = conn.execute("""
-        SELECT DATE(date) as day, COUNT(*) as cnt, SUM(amount) as total
+        SELECT date::date as day, COUNT(*) as cnt, SUM(amount) as total
         FROM donations
-        GROUP BY DATE(date)
+        GROUP BY date::date
         ORDER BY day
     """).fetchall()
     cumulative = 0
@@ -132,7 +130,7 @@ def _get_fundraising_timeline(conn):
     for r in rows:
         cumulative += r["total"]
         result.append({
-            "date": r["day"],
+            "date": str(r["day"]),
             "daily_count": r["cnt"],
             "daily_amount": round(r["total"], 2),
             "cumulative": round(cumulative, 2),
@@ -143,40 +141,37 @@ def _get_fundraising_timeline(conn):
 @app.route("/api/fundraising-timeline")
 def api_fundraising_timeline():
     """Cumulative donations over time."""
-    conn = get_db()
-    data = _get_fundraising_timeline(conn)
-    conn.close()
+    with get_conn() as conn:
+        data = _get_fundraising_timeline(conn)
     return jsonify(data)
 
 
 @app.route("/api/snapshots")
 def api_snapshots():
     """Historical daily snapshots for tracking fundraising growth over time."""
-    conn = get_db()
-    rows = conn.execute("""
-        SELECT snapshot_date, team_id, raised, goal, all_time_raised,
-               members_count, donations_count, total_donated
-        FROM daily_snapshots
-        WHERE team_id=?
-        ORDER BY snapshot_date
-    """, (PARENT_TEAM_ID,)).fetchall()
-    conn.close()
+    with get_conn() as conn:
+        rows = conn.execute("""
+            SELECT snapshot_date, team_id, raised, goal, all_time_raised,
+                   members_count, donations_count, total_donated
+            FROM daily_snapshots
+            WHERE team_id=%s
+            ORDER BY snapshot_date
+        """, (PARENT_TEAM_ID,)).fetchall()
     return jsonify([dict(r) for r in rows])
 
 
 @app.route("/api/snapshots/teams")
 def api_snapshots_teams():
     """Historical daily snapshots per sub-team."""
-    conn = get_db()
-    rows = conn.execute("""
-        SELECT s.snapshot_date, s.team_id, t.name as team_name,
-               s.raised, s.all_time_raised, s.members_count
-        FROM daily_snapshots s
-        JOIN teams t ON s.team_id=t.id
-        WHERE s.team_id != ?
-        ORDER BY s.snapshot_date, s.raised DESC
-    """, (PARENT_TEAM_ID,)).fetchall()
-    conn.close()
+    with get_conn() as conn:
+        rows = conn.execute("""
+            SELECT s.snapshot_date, s.team_id, t.name as team_name,
+                   s.raised, s.all_time_raised, s.members_count
+            FROM daily_snapshots s
+            JOIN teams t ON s.team_id=t.id
+            WHERE s.team_id != %s
+            ORDER BY s.snapshot_date, s.raised DESC
+        """, (PARENT_TEAM_ID,)).fetchall()
     return jsonify([dict(r) for r in rows])
 
 
@@ -194,29 +189,26 @@ def _get_top_fundraisers(conn):
 
 @app.route("/api/top-fundraisers")
 def api_top_fundraisers():
-    conn = get_db()
-    data = _get_top_fundraisers(conn)
-    conn.close()
+    with get_conn() as conn:
+        data = _get_top_fundraisers(conn)
     return jsonify(data)
 
 
 def _get_team_breakdown(conn):
-    # Mutually exclusive classification: rider > challenger > volunteer > registered only.
-    # Untyped members with a route count as riders.
     rows = conn.execute("""
         SELECT t.name,
-               SUM(CASE WHEN m.is_rider=1 OR (m.is_rider=0 AND m.is_challenger=0 AND m.is_volunteer=0 AND mr.member_public_id IS NOT NULL) THEN 1 ELSE 0 END) as riders,
-               SUM(CASE WHEN m.is_challenger=1 AND m.is_rider=0 THEN 1 ELSE 0 END) as challengers,
-               SUM(CASE WHEN m.is_volunteer=1 AND m.is_rider=0 AND m.is_challenger=0 THEN 1 ELSE 0 END) as volunteers,
+               SUM(CASE WHEN m.is_rider=true OR (m.is_rider=false AND m.is_challenger=false AND m.is_volunteer=false AND mr.member_public_id IS NOT NULL) THEN 1 ELSE 0 END) as riders,
+               SUM(CASE WHEN m.is_challenger=true AND m.is_rider=false THEN 1 ELSE 0 END) as challengers,
+               SUM(CASE WHEN m.is_volunteer=true AND m.is_rider=false AND m.is_challenger=false THEN 1 ELSE 0 END) as volunteers,
                COUNT(DISTINCT m.public_id) as total,
                SUM(m.committed_amount) as total_committed,
                SUM(m.raised) as total_raised,
                SUM(m.all_time_raised) as total_all_time,
-               SUM(m.committed_high_roller) as high_rollers,
-               SUM(m.is_cancer_survivor) as survivors,
-               SUM(CASE WHEN m.committed_high_roller=1 THEN m.committed_amount ELSE 0 END) as hr_committed,
-               SUM(CASE WHEN m.committed_high_roller=0 THEN m.committed_amount ELSE 0 END) as std_committed,
-               SUM(CASE WHEN m.tags LIKE '%"1 year"%' AND m.is_rider=1 THEN 1 ELSE 0 END) as first_year
+               SUM(CASE WHEN m.committed_high_roller=true THEN 1 ELSE 0 END) as high_rollers,
+               SUM(CASE WHEN m.is_cancer_survivor=true THEN 1 ELSE 0 END) as survivors,
+               SUM(CASE WHEN m.committed_high_roller=true THEN m.committed_amount ELSE 0 END) as hr_committed,
+               SUM(CASE WHEN m.committed_high_roller=false THEN m.committed_amount ELSE 0 END) as std_committed,
+               SUM(CASE WHEN m.tags LIKE '%%"1 year"%%' AND m.is_rider=true THEN 1 ELSE 0 END) as first_year
         FROM members m
         JOIN teams t ON m.team_id=t.id
         LEFT JOIN (SELECT DISTINCT member_public_id FROM member_routes) mr
@@ -230,9 +222,8 @@ def _get_team_breakdown(conn):
 @app.route("/api/team-breakdown")
 def api_team_breakdown():
     """Team breakdown with participant types and commitment subtotals."""
-    conn = get_db()
-    data = _get_team_breakdown(conn)
-    conn.close()
+    with get_conn() as conn:
+        data = _get_team_breakdown(conn)
     return jsonify(data)
 
 
@@ -240,11 +231,11 @@ def _get_commitment_tiers(conn):
     rows = conn.execute("""
         SELECT committed_amount as tier,
                COUNT(*) as count,
-               SUM(is_rider) as riders,
-               SUM(is_challenger) as challengers,
+               SUM(CASE WHEN is_rider=true THEN 1 ELSE 0 END) as riders,
+               SUM(CASE WHEN is_challenger=true THEN 1 ELSE 0 END) as challengers,
                SUM(raised) as total_raised,
                SUM(all_time_raised) as total_all_time,
-               SUM(committed_high_roller) as high_rollers
+               SUM(CASE WHEN committed_high_roller=true THEN 1 ELSE 0 END) as high_rollers
         FROM members
         GROUP BY committed_amount
         ORDER BY committed_amount
@@ -255,9 +246,8 @@ def _get_commitment_tiers(conn):
 @app.route("/api/commitment-tiers")
 def api_commitment_tiers():
     """Members grouped by commitment amount tier."""
-    conn = get_db()
-    data = _get_commitment_tiers(conn)
-    conn.close()
+    with get_conn() as conn:
+        data = _get_commitment_tiers(conn)
     return jsonify(data)
 
 
@@ -265,14 +255,14 @@ def _get_ride_type_breakdown(conn):
     rows = conn.execute("""
         SELECT
             CASE
-                WHEN ride_type LIKE '%gravel%' AND ride_type LIKE '%signature%' THEN 'Both'
+                WHEN ride_type LIKE '%%gravel%%' AND ride_type LIKE '%%signature%%' THEN 'Both'
                 WHEN ride_type = 'signature' THEN 'Signature'
                 WHEN ride_type = 'gravel' THEN 'Gravel'
                 ELSE 'None/Challenger'
             END as ride_category,
             COUNT(*) as count,
-            SUM(is_rider) as riders,
-            SUM(is_challenger) as challengers,
+            SUM(CASE WHEN is_rider=true THEN 1 ELSE 0 END) as riders,
+            SUM(CASE WHEN is_challenger=true THEN 1 ELSE 0 END) as challengers,
             SUM(committed_amount) as total_committed,
             SUM(raised) as total_raised
         FROM members
@@ -285,9 +275,8 @@ def _get_ride_type_breakdown(conn):
 @app.route("/api/ride-type-breakdown")
 def api_ride_type_breakdown():
     """Members grouped by ride type (signature, gravel, both, none)."""
-    conn = get_db()
-    data = _get_ride_type_breakdown(conn)
-    conn.close()
+    with get_conn() as conn:
+        data = _get_ride_type_breakdown(conn)
     return jsonify(data)
 
 
@@ -323,7 +312,7 @@ def _get_routes(conn):
     ride_totals = {}
     for rt_key in ("signature", "gravel"):
         row = conn.execute(
-            "SELECT COUNT(DISTINCT member_public_id) as cnt FROM member_routes WHERE ride_type=?",
+            "SELECT COUNT(DISTINCT member_public_id) as cnt FROM member_routes WHERE ride_type=%s",
             (rt_key,),
         ).fetchone()
         ride_totals[rt_key] = row["cnt"]
@@ -342,25 +331,23 @@ def _get_routes(conn):
 @app.route("/api/routes")
 def api_routes():
     """All routes with actual signups and fundraising totals (split across routes)."""
-    conn = get_db()
-    data = _get_routes(conn)
-    conn.close()
+    with get_conn() as conn:
+        data = _get_routes(conn)
     return jsonify(data)
 
 
 @app.route("/api/route-members/<route_id>")
 def api_route_members(route_id):
     """Members signed up for a specific route, with years riding."""
-    conn = get_db()
-    rows = conn.execute("""
-        SELECT m.public_id, m.name, m.raised, m.committed_amount,
-               m.tags, m.is_cancer_survivor, m.profile_image_url
-        FROM member_routes mr
-        JOIN members m ON m.public_id = mr.member_public_id
-        WHERE mr.route_id = ?
-        ORDER BY m.raised DESC
-    """, (route_id,)).fetchall()
-    conn.close()
+    with get_conn() as conn:
+        rows = conn.execute("""
+            SELECT m.public_id, m.name, m.raised, m.committed_amount,
+                   m.tags, m.is_cancer_survivor, m.profile_image_url
+            FROM member_routes mr
+            JOIN members m ON m.public_id = mr.member_public_id
+            WHERE mr.route_id = %s
+            ORDER BY m.raised DESC
+        """, (route_id,)).fetchall()
 
     import json as _json
     result = []
@@ -385,7 +372,7 @@ def _get_signup_timeline(conn):
         SELECT snapshot_date, signature_riders, gravel_riders, members_count, raised,
                riders_count, challengers_count, volunteers_count
         FROM daily_snapshots
-        WHERE team_id = ?
+        WHERE team_id = %s
         ORDER BY snapshot_date
     """, (PARENT_TEAM_ID,)).fetchall()
     return [dict(r) for r in rows]
@@ -394,9 +381,8 @@ def _get_signup_timeline(conn):
 @app.route("/api/signup-timeline")
 def api_signup_timeline():
     """Participant signup counts over time from daily snapshots."""
-    conn = get_db()
-    data = _get_signup_timeline(conn)
-    conn.close()
+    with get_conn() as conn:
+        data = _get_signup_timeline(conn)
     return jsonify(data)
 
 
@@ -407,9 +393,8 @@ def _get_events(conn):
 
 @app.route("/api/events")
 def api_events():
-    conn = get_db()
-    data = _get_events(conn)
-    conn.close()
+    with get_conn() as conn:
+        data = _get_events(conn)
     return jsonify(data)
 
 
@@ -425,11 +410,11 @@ def _get_top_donors(conn):
             CASE
                 WHEN COALESCE(NULLIF(NULLIF(donor_name, ''), 'Anonymous'), recognition_name, 'Anonymous') = 'Anonymous'
                     THEN NULL
-                ELSE GROUP_CONCAT(DISTINCT CASE
+                ELSE string_agg(DISTINCT CASE
                     WHEN recognition_name IS NOT NULL
                      AND recognition_name != ''
                      AND recognition_name != COALESCE(NULLIF(donor_name, 'Anonymous'), '')
-                    THEN recognition_name END)
+                    THEN recognition_name END, ',')
             END as affiliations
         FROM donations
         GROUP BY COALESCE(NULLIF(NULLIF(donor_name, ''), 'Anonymous'), recognition_name, 'Anonymous')
@@ -440,9 +425,8 @@ def _get_top_donors(conn):
 
 @app.route("/api/top-donors")
 def api_top_donors():
-    conn = get_db()
-    data = _get_top_donors(conn)
-    conn.close()
+    with get_conn() as conn:
+        data = _get_top_donors(conn)
     return jsonify(data)
 
 
@@ -459,7 +443,7 @@ def _get_members(conn):
         ORDER BY m.raised DESC
     """).fetchall()
     route_rows = conn.execute("""
-        SELECT member_public_id, GROUP_CONCAT(route_name, ', ') as route_names
+        SELECT member_public_id, string_agg(route_name, ', ') as route_names
         FROM member_routes
         GROUP BY member_public_id
     """).fetchall()
@@ -474,9 +458,8 @@ def _get_members(conn):
 
 @app.route("/api/members")
 def api_members():
-    conn = get_db()
-    data = _get_members(conn)
-    conn.close()
+    with get_conn() as conn:
+        data = _get_members(conn)
     return jsonify(data)
 
 
@@ -495,9 +478,8 @@ def _get_donations(conn):
 
 @app.route("/api/donations")
 def api_donations():
-    conn = get_db()
-    data = _get_donations(conn)
-    conn.close()
+    with get_conn() as conn:
+        data = _get_donations(conn)
     return jsonify(data)
 
 
@@ -508,12 +490,12 @@ def _get_company_donations(conn):
                COUNT(*) as donation_count,
                COUNT(DISTINCT donor_name) as donor_count,
                COUNT(DISTINCT recipient_public_id) as recipient_count,
-               GROUP_CONCAT(DISTINCT donor_name) as donors
+               string_agg(DISTINCT donor_name, ',') as donors
         FROM donations
         WHERE recognition_name IS NOT NULL
           AND donor_name IS NOT NULL
           AND recognition_name != donor_name
-          AND anonymous_to_public = 0
+          AND anonymous_to_public = false
         GROUP BY recognition_name
         ORDER BY SUM(amount) DESC
     """).fetchall()
@@ -522,9 +504,8 @@ def _get_company_donations(conn):
 
 @app.route("/api/companies")
 def api_companies():
-    conn = get_db()
-    data = _get_company_donations(conn)
-    conn.close()
+    with get_conn() as conn:
+        data = _get_company_donations(conn)
     return jsonify(data)
 
 
@@ -554,7 +535,6 @@ def _get_ticker():
                 return data
     except Exception as e:
         app.logger.warning("Ticker API failed: %s", e)
-    # Fall back to cached value
     try:
         with open(TICKER_CACHE_PATH, "r") as f:
             return json.load(f)
@@ -570,7 +550,7 @@ def _get_subteam_snapshots(conn):
         SELECT ds.snapshot_date, t.name, ds.raised, ds.members_count
         FROM daily_snapshots ds
         JOIN teams t ON ds.team_id=t.id
-        WHERE t.parent_id=? AND ds.snapshot_date>=?
+        WHERE t.parent_id=%s AND ds.snapshot_date>=%s
         ORDER BY ds.snapshot_date
     """, (PARENT_TEAM_ID, cutoff)).fetchall()
     return [dict(r) for r in rows]
@@ -592,7 +572,10 @@ def _get_kids_overview(conn):
         return None
     if row is None:
         return None
-    return dict(row)
+    d = dict(row)
+    if d.get("last_scraped"):
+        d["last_scraped"] = d["last_scraped"].isoformat() if hasattr(d["last_scraped"], "isoformat") else d["last_scraped"]
+    return d
 
 
 def _get_kids_snapshots(conn):
@@ -614,7 +597,7 @@ def _get_kids_snapshots(conn):
 def _get_org_leaderboard(conn):
     """Latest org_snapshots rows sorted by raised DESC."""
     try:
-        latest = conn.execute("SELECT MAX(snapshot_date) FROM org_snapshots").fetchone()[0]
+        latest = conn.execute("SELECT MAX(snapshot_date) as max_date FROM org_snapshots").fetchone()["max_date"]
     except Exception:
         return []
     if not latest:
@@ -623,10 +606,16 @@ def _get_org_leaderboard(conn):
         SELECT team_id, name, members_count, sub_team_count, raised, goal,
                all_time_raised, last_scraped
         FROM org_snapshots
-        WHERE snapshot_date = ?
+        WHERE snapshot_date = %s
         ORDER BY raised DESC
     """, (latest,)).fetchall()
-    return [dict(r) for r in rows]
+    result = []
+    for r in rows:
+        d = dict(r)
+        if d.get("last_scraped"):
+            d["last_scraped"] = d["last_scraped"].isoformat() if hasattr(d["last_scraped"], "isoformat") else d["last_scraped"]
+        result.append(d)
+    return result
 
 
 def _get_org_snapshots(conn):
@@ -646,48 +635,49 @@ def _get_org_snapshots(conn):
 # ── Bundle endpoint (single fetch for the dashboard) ─────────────────────
 
 def _build_bundle():
-    conn = get_db()
-    bundle = {
-        "overview": _get_overview(conn),
-        "teams": _get_teams(conn),
-        "timeline": _get_fundraising_timeline(conn),
-        "fundraisers": _get_top_fundraisers(conn),
-        "donors": _get_top_donors(conn),
-        "members": _get_members(conn),
-        "donations": _get_donations(conn),
-        "teamBreakdown": _get_team_breakdown(conn),
-        "commitTiers": _get_commitment_tiers(conn),
-        "rideTypes": _get_ride_type_breakdown(conn),
-        "routes": _get_routes(conn),
-        "signupTimeline": _get_signup_timeline(conn),
-        "events": _get_events(conn),
-        "companies": _get_company_donations(conn),
-        "ticker": _get_ticker(),
-        "subteamSnapshots": _get_subteam_snapshots(conn),
-        "kidsOverview": _get_kids_overview(conn),
-        "kidsSnapshots": _get_kids_snapshots(conn),
-        "orgLeaderboard": _get_org_leaderboard(conn),
-        "orgSnapshots": _get_org_snapshots(conn),
-    }
-    conn.close()
+    with get_conn() as conn:
+        bundle = {
+            "overview": _get_overview(conn),
+            "teams": _get_teams(conn),
+            "timeline": _get_fundraising_timeline(conn),
+            "fundraisers": _get_top_fundraisers(conn),
+            "donors": _get_top_donors(conn),
+            "members": _get_members(conn),
+            "donations": _get_donations(conn),
+            "teamBreakdown": _get_team_breakdown(conn),
+            "commitTiers": _get_commitment_tiers(conn),
+            "rideTypes": _get_ride_type_breakdown(conn),
+            "routes": _get_routes(conn),
+            "signupTimeline": _get_signup_timeline(conn),
+            "events": _get_events(conn),
+            "companies": _get_company_donations(conn),
+            "ticker": _get_ticker(),
+            "subteamSnapshots": _get_subteam_snapshots(conn),
+            "kidsOverview": _get_kids_overview(conn),
+            "kidsSnapshots": _get_kids_snapshots(conn),
+            "orgLeaderboard": _get_org_leaderboard(conn),
+            "orgSnapshots": _get_org_snapshots(conn),
+        }
     return bundle
+
+
+class _DateTimeEncoder(json.JSONEncoder):
+    def default(self, obj):
+        if hasattr(obj, "isoformat"):
+            return obj.isoformat()
+        return super().default(obj)
 
 
 @app.route("/api/bundle")
 def api_bundle():
-    """All dashboard data in one response. Cached until DB file mtime changes."""
-    try:
-        current_mtime = DB_PATH.stat().st_mtime
-    except OSError:
-        return jsonify({"error": "database not found"}), 500
-
-    if _cache["data"] is not None and _cache["db_mtime"] == current_mtime:
-        return Response(_cache["data"], mimetype="application/json")
+    """All dashboard data in one response. Cached with 30s TTL."""
+    cached = _cache.get("bundle")
+    if cached is not None:
+        return Response(cached, mimetype="application/json")
 
     bundle = _build_bundle()
-    raw = json.dumps(bundle)
-    _cache["data"] = raw
-    _cache["db_mtime"] = current_mtime
+    raw = json.dumps(bundle, cls=_DateTimeEncoder)
+    _cache["bundle"] = raw
     return Response(raw, mimetype="application/json")
 
 
@@ -695,17 +685,15 @@ def api_bundle():
 
 @app.route("/api/kids-overview")
 def api_kids_overview():
-    conn = get_db()
-    data = _get_kids_overview(conn)
-    conn.close()
+    with get_conn() as conn:
+        data = _get_kids_overview(conn)
     return jsonify(data)
 
 
 @app.route("/api/kids-snapshots")
 def api_kids_snapshots():
-    conn = get_db()
-    data = _get_kids_snapshots(conn)
-    conn.close()
+    with get_conn() as conn:
+        data = _get_kids_snapshots(conn)
     return jsonify(data)
 
 
@@ -713,17 +701,15 @@ def api_kids_snapshots():
 
 @app.route("/api/org-leaderboard")
 def api_org_leaderboard():
-    conn = get_db()
-    data = _get_org_leaderboard(conn)
-    conn.close()
+    with get_conn() as conn:
+        data = _get_org_leaderboard(conn)
     return jsonify(data)
 
 
 @app.route("/api/org-snapshots")
 def api_org_snapshots():
-    conn = get_db()
-    data = _get_org_snapshots(conn)
-    conn.close()
+    with get_conn() as conn:
+        data = _get_org_snapshots(conn)
     return jsonify(data)
 
 

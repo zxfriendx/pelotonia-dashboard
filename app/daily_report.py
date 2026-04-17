@@ -31,7 +31,6 @@ import argparse
 import io
 import os
 import smtplib
-import sqlite3
 import sys
 from datetime import datetime, timedelta
 from email.mime.base import MIMEBase
@@ -45,15 +44,15 @@ from PIL import Image, ImageDraw, ImageFont
 try:
     from dotenv import load_dotenv
     load_dotenv()
-    # Also try pelotonia-kids .env for Gmail creds
     kids_env = Path(__file__).resolve().parent.parent.parent / "pelotonia-kids" / ".env"
     if kids_env.exists():
         load_dotenv(kids_env)
 except ImportError:
     pass
 
+from db import get_conn
+
 SCRIPT_DIR = Path(__file__).resolve().parent
-DB_PATH = Path(os.environ.get("PELOTONIA_DB", SCRIPT_DIR / "pelotonia_data.db"))
 PARENT_TEAM_ID = "a0s3t00000BKX8sAAH"
 
 SENDER_EMAIL = os.environ.get("GMAIL_SENDER", "")
@@ -85,9 +84,7 @@ RIDE_DAY = datetime(2026, 8, 1)
 
 
 def get_db():
-    conn = sqlite3.connect(str(DB_PATH))
-    conn.row_factory = sqlite3.Row
-    return conn
+    return get_conn().__enter__()
 
 
 def money(v):
@@ -124,117 +121,106 @@ def pct(current, goal):
 
 
 def gather_data(weekly=False):
-    """Pull all data needed for the report from SQLite.
+    """Pull all data needed for the report from AlloyDB.
 
     Args:
         weekly: If True, compute deltas over 7 days instead of 1 day.
     """
-    conn = get_db()
-    today = datetime.now().strftime("%Y-%m-%d")
-    lookback_days = 7 if weekly else 1
-    compare_date = (datetime.now() - timedelta(days=lookback_days)).strftime("%Y-%m-%d")
+    with get_conn() as conn:
+        today = datetime.now().strftime("%Y-%m-%d")
+        lookback_days = 7 if weekly else 1
+        compare_date = (datetime.now() - timedelta(days=lookback_days)).strftime("%Y-%m-%d")
 
-    # Current overview
-    parent = conn.execute(
-        "SELECT name, raised, COALESCE(goal_override, goal) as goal, all_time_raised, members_count "
-        "FROM teams WHERE id=?", (PARENT_TEAM_ID,)
-    ).fetchone()
+        parent = conn.execute(
+            "SELECT name, raised, COALESCE(goal_override, goal) as goal, all_time_raised, members_count "
+            "FROM teams WHERE id=%s", (PARENT_TEAM_ID,)
+        ).fetchone()
 
-    riders = conn.execute("SELECT COUNT(*) as cnt FROM members WHERE is_rider=1").fetchone()["cnt"]
-    challengers = conn.execute("SELECT COUNT(*) as cnt FROM members WHERE is_challenger=1").fetchone()["cnt"]
-    volunteers = conn.execute("SELECT COUNT(*) as cnt FROM members WHERE is_volunteer=1").fetchone()["cnt"]
-    members_total = conn.execute("SELECT COUNT(*) as cnt FROM members").fetchone()["cnt"]
-    high_rollers = conn.execute("SELECT COUNT(*) as cnt FROM members WHERE tags LIKE '%High Roller%'").fetchone()["cnt"]
-    survivors = conn.execute("SELECT COUNT(*) as cnt FROM members WHERE is_cancer_survivor=1").fetchone()["cnt"]
-    first_year = conn.execute("""SELECT COUNT(*) as cnt FROM members WHERE tags LIKE '%"1 year"%' AND is_rider=1""").fetchone()["cnt"]
+        riders = conn.execute("SELECT COUNT(*) as cnt FROM members WHERE is_rider=true").fetchone()["cnt"]
+        challengers = conn.execute("SELECT COUNT(*) as cnt FROM members WHERE is_challenger=true").fetchone()["cnt"]
+        volunteers = conn.execute("SELECT COUNT(*) as cnt FROM members WHERE is_volunteer=true").fetchone()["cnt"]
+        members_total = conn.execute("SELECT COUNT(*) as cnt FROM members").fetchone()["cnt"]
+        high_rollers = conn.execute("SELECT COUNT(*) as cnt FROM members WHERE tags LIKE '%%High Roller%%'").fetchone()["cnt"]
+        survivors = conn.execute("SELECT COUNT(*) as cnt FROM members WHERE is_cancer_survivor=true").fetchone()["cnt"]
+        first_year = conn.execute("""SELECT COUNT(*) as cnt FROM members WHERE tags LIKE '%%"1 year"%%' AND is_rider=true""").fetchone()["cnt"]
 
-    commit_row = conn.execute("""
-        SELECT COALESCE(SUM(committed_amount),0) as total,
-               COALESCE(SUM(CASE WHEN committed_high_roller=1 THEN committed_amount ELSE 0 END),0) as hr,
-               COALESCE(SUM(CASE WHEN committed_high_roller=0 THEN committed_amount ELSE 0 END),0) as std
-        FROM members WHERE team_id IS NOT NULL
-    """).fetchone()
+        commit_row = conn.execute("""
+            SELECT COALESCE(SUM(committed_amount),0) as total,
+                   COALESCE(SUM(CASE WHEN committed_high_roller=true THEN committed_amount ELSE 0 END),0) as hr,
+                   COALESCE(SUM(CASE WHEN committed_high_roller=false THEN committed_amount ELSE 0 END),0) as std
+            FROM members WHERE team_id IS NOT NULL
+        """).fetchone()
 
-    # Snapshots for deltas (today vs compare_date)
-    snap_today = conn.execute(
-        "SELECT * FROM daily_snapshots WHERE team_id=? AND snapshot_date=?",
-        (PARENT_TEAM_ID, today)
-    ).fetchone()
-    snap_compare = conn.execute(
-        "SELECT * FROM daily_snapshots WHERE team_id=? AND snapshot_date<=? ORDER BY snapshot_date DESC LIMIT 1",
-        (PARENT_TEAM_ID, compare_date)
-    ).fetchone()
+        snap_today = conn.execute(
+            "SELECT * FROM daily_snapshots WHERE team_id=%s AND snapshot_date=%s",
+            (PARENT_TEAM_ID, today)
+        ).fetchone()
+        snap_compare = conn.execute(
+            "SELECT * FROM daily_snapshots WHERE team_id=%s AND snapshot_date<=%s ORDER BY snapshot_date DESC LIMIT 1",
+            (PARENT_TEAM_ID, compare_date)
+        ).fetchone()
 
-    # Sub-team breakdown
-    team_rows = conn.execute("""
-        SELECT t.name,
-               SUM(CASE WHEN m.is_rider=1 OR (m.is_rider=0 AND m.is_challenger=0 AND m.is_volunteer=0
-                   AND mr.member_public_id IS NOT NULL) THEN 1 ELSE 0 END) as riders,
-               SUM(CASE WHEN m.is_challenger=1 AND m.is_rider=0 THEN 1 ELSE 0 END) as challengers,
-               SUM(CASE WHEN m.is_volunteer=1 AND m.is_rider=0 AND m.is_challenger=0 THEN 1 ELSE 0 END) as volunteers,
-               COUNT(DISTINCT m.public_id) as total,
-               COALESCE(SUM(m.committed_amount),0) as total_committed,
-               COALESCE(SUM(m.raised),0) as total_raised,
-               SUM(CASE WHEN m.tags LIKE '%"1 year"%' AND m.is_rider=1 THEN 1 ELSE 0 END) as first_year
-        FROM members m
-        JOIN teams t ON m.team_id=t.id
-        LEFT JOIN (SELECT DISTINCT member_public_id FROM member_routes) mr
-            ON m.public_id=mr.member_public_id
-        WHERE t.parent_id=?
-        GROUP BY t.name
-        ORDER BY SUM(m.committed_amount) DESC
-    """, (PARENT_TEAM_ID,)).fetchall()
+        team_rows = conn.execute("""
+            SELECT t.name,
+                   SUM(CASE WHEN m.is_rider=true OR (m.is_rider=false AND m.is_challenger=false AND m.is_volunteer=false
+                       AND mr.member_public_id IS NOT NULL) THEN 1 ELSE 0 END) as riders,
+                   SUM(CASE WHEN m.is_challenger=true AND m.is_rider=false THEN 1 ELSE 0 END) as challengers,
+                   SUM(CASE WHEN m.is_volunteer=true AND m.is_rider=false AND m.is_challenger=false THEN 1 ELSE 0 END) as volunteers,
+                   COUNT(DISTINCT m.public_id) as total,
+                   COALESCE(SUM(m.committed_amount),0) as total_committed,
+                   COALESCE(SUM(m.raised),0) as total_raised,
+                   SUM(CASE WHEN m.tags LIKE '%%"1 year"%%' AND m.is_rider=true THEN 1 ELSE 0 END) as first_year
+            FROM members m
+            JOIN teams t ON m.team_id=t.id
+            LEFT JOIN (SELECT DISTINCT member_public_id FROM member_routes) mr
+                ON m.public_id=mr.member_public_id
+            WHERE t.parent_id=%s
+            GROUP BY t.name
+            ORDER BY SUM(m.committed_amount) DESC
+        """, (PARENT_TEAM_ID,)).fetchall()
 
-    # Sub-team snapshot deltas (today vs compare_date)
-    subteam_deltas = {}
-    sub_snaps_today = conn.execute("""
-        SELECT ds.team_id, t.name, ds.raised, ds.members_count
-        FROM daily_snapshots ds
-        JOIN teams t ON ds.team_id=t.id
-        WHERE ds.snapshot_date=? AND t.parent_id=?
-    """, (today, PARENT_TEAM_ID)).fetchall()
-    # For weekly, find the closest snapshot on or before compare_date per team
-    sub_snaps_compare = conn.execute("""
-        SELECT ds.team_id, t.name, ds.raised, ds.members_count
-        FROM daily_snapshots ds
-        JOIN teams t ON ds.team_id=t.id
-        WHERE ds.snapshot_date=(
-            SELECT MAX(ds2.snapshot_date) FROM daily_snapshots ds2
-            WHERE ds2.team_id=ds.team_id AND ds2.snapshot_date<=?
-        ) AND t.parent_id=?
-    """, (compare_date, PARENT_TEAM_ID)).fetchall()
+        subteam_deltas = {}
+        sub_snaps_today = conn.execute("""
+            SELECT ds.team_id, t.name, ds.raised, ds.members_count
+            FROM daily_snapshots ds
+            JOIN teams t ON ds.team_id=t.id
+            WHERE ds.snapshot_date=%s AND t.parent_id=%s
+        """, (today, PARENT_TEAM_ID)).fetchall()
+        sub_snaps_compare = conn.execute("""
+            SELECT ds.team_id, t.name, ds.raised, ds.members_count
+            FROM daily_snapshots ds
+            JOIN teams t ON ds.team_id=t.id
+            WHERE ds.snapshot_date=(
+                SELECT MAX(ds2.snapshot_date) FROM daily_snapshots ds2
+                WHERE ds2.team_id=ds.team_id AND ds2.snapshot_date<=%s
+            ) AND t.parent_id=%s
+        """, (compare_date, PARENT_TEAM_ID)).fetchall()
 
-    compare_map = {r["team_id"]: dict(r) for r in sub_snaps_compare} if sub_snaps_compare else {}
-    for row in sub_snaps_today:
-        tid = row["team_id"]
-        c = compare_map.get(tid, {})
-        subteam_deltas[row["name"]] = {
-            "raised_delta": (row["raised"] or 0) - (c.get("raised") or 0),
-            "members_delta": (row["members_count"] or 0) - (c.get("members_count") or 0),
-        }
+        compare_map = {r["team_id"]: dict(r) for r in sub_snaps_compare} if sub_snaps_compare else {}
+        for row in sub_snaps_today:
+            tid = row["team_id"]
+            c = compare_map.get(tid, {})
+            subteam_deltas[row["name"]] = {
+                "raised_delta": (row["raised"] or 0) - (c.get("raised") or 0),
+                "members_delta": (row["members_count"] or 0) - (c.get("members_count") or 0),
+            }
 
-    # Last scraped
-    last_scraped = conn.execute("SELECT MAX(last_scraped) as ls FROM members").fetchone()["ls"]
+        last_scraped = conn.execute("SELECT MAX(last_scraped) as ls FROM members").fetchone()["ls"]
+        last_scraped_str = last_scraped.isoformat() if hasattr(last_scraped, "isoformat") else last_scraped
 
-    conn.close()
+        raised_delta = 0
+        members_delta = 0
+        riders_delta = 0
+        challengers_delta = 0
+        volunteers_delta = 0
+        if snap_today and snap_compare:
+            raised_delta = (snap_today["raised"] or 0) - (snap_compare["raised"] or 0)
+            members_delta = (snap_today["members_count"] or 0) - (snap_compare["members_count"] or 0)
+            if (snap_compare["riders_count"] or 0) > 0:
+                riders_delta = (snap_today["riders_count"] or 0) - (snap_compare["riders_count"] or 0)
+                challengers_delta = (snap_today["challengers_count"] or 0) - (snap_compare["challengers_count"] or 0)
+                volunteers_delta = (snap_today["volunteers_count"] or 0) - (snap_compare["volunteers_count"] or 0)
 
-    # Compute deltas (per participant type when available, else total members)
-    raised_delta = 0
-    members_delta = 0
-    riders_delta = 0
-    challengers_delta = 0
-    volunteers_delta = 0
-    if snap_today and snap_compare:
-        raised_delta = (snap_today["raised"] or 0) - (snap_compare["raised"] or 0)
-        members_delta = (snap_today["members_count"] or 0) - (snap_compare["members_count"] or 0)
-        # Only compute per-type deltas if the compare snapshot has the data
-        # (columns were added mid-stream; older snapshots have 0)
-        if (snap_compare["riders_count"] or 0) > 0:
-            riders_delta = (snap_today["riders_count"] or 0) - (snap_compare["riders_count"] or 0)
-            challengers_delta = (snap_today["challengers_count"] or 0) - (snap_compare["challengers_count"] or 0)
-            volunteers_delta = (snap_today["volunteers_count"] or 0) - (snap_compare["volunteers_count"] or 0)
-
-    # Campaign day
     now = datetime.now()
     campaign_day = max((now - CAMPAIGN_START).days, 0)
     days_to_ride = max((RIDE_DAY - now).days, 0)
@@ -270,7 +256,7 @@ def gather_data(weekly=False):
         "subteam_deltas": subteam_deltas,
         "campaign_day": campaign_day,
         "days_to_ride": days_to_ride,
-        "last_scraped": last_scraped,
+        "last_scraped": last_scraped_str,
         "date": date_str,
         "period": period_label,
     }

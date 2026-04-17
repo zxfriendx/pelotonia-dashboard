@@ -15,46 +15,23 @@ Usage:
   python pledgeit_scraper.py                # Scrape + store today's snapshot
   python pledgeit_scraper.py --summary      # Print latest stats from DB
 
-Requires: stdlib only (urllib.request, json, re, sqlite3)
+Requires: urllib.request, json, re, psycopg (via db module)
 """
 
 import argparse
 import json
-import os
 import re
-import sqlite3
 import sys
 import urllib.request
 from datetime import datetime, timezone
-from pathlib import Path
+
+from db import get_conn, init_schema
 
 # ---------------------------------------------------------------------------
 # Config
 # ---------------------------------------------------------------------------
 CAMPAIGN_URL = "https://charity.pledgeit.org/PelotoniaKids-TeamHuntington"
 CAMPAIGN_ID = "dbpr4x7j9x"
-
-SCRIPT_DIR = Path(__file__).resolve().parent
-DB_PATH = Path(os.environ.get("PELOTONIA_DB", SCRIPT_DIR / "pelotonia_data.db"))
-
-# ---------------------------------------------------------------------------
-# Database
-# ---------------------------------------------------------------------------
-
-def init_db(conn):
-    """Create the kids_snapshots table if it doesn't exist."""
-    conn.executescript("""
-        CREATE TABLE IF NOT EXISTS kids_snapshots (
-            snapshot_date TEXT NOT NULL,
-            campaign_id TEXT NOT NULL DEFAULT 'dbpr4x7j9x',
-            fundraiser_count INTEGER DEFAULT 0,
-            estimated_amount_raised REAL DEFAULT 0,
-            monetary_goal REAL DEFAULT 0,
-            team_count INTEGER DEFAULT 0,
-            last_scraped TEXT,
-            PRIMARY KEY (snapshot_date, campaign_id)
-        );
-    """)
 
 
 # ---------------------------------------------------------------------------
@@ -72,15 +49,7 @@ def fetch_page(url):
 
 
 def parse_aggregate_stats(html):
-    """Extract aggregate stats from __NEXT_DATA__ JSON in page HTML.
-
-    The data lives in the Apollo cache at:
-      props.apolloState.data["Campaign:<CAMPAIGN_ID>"]
-
-    Returns dict with keys: fundraiser_count, estimated_amount_raised,
-    monetary_goal, team_count.  Raises ValueError on parse failure.
-    """
-    # Extract the __NEXT_DATA__ script content
+    """Extract aggregate stats from __NEXT_DATA__ JSON in page HTML."""
     m = re.search(r'<script\s+id="__NEXT_DATA__"\s+type="application/json">(.*?)</script>', html, re.DOTALL)
     if not m:
         raise ValueError("Could not find __NEXT_DATA__ script tag in page HTML")
@@ -88,7 +57,6 @@ def parse_aggregate_stats(html):
     raw_json = m.group(1)
     data = json.loads(raw_json)
 
-    # Primary path: Apollo cache
     campaign = None
     try:
         apollo_data = data["props"]["apolloState"]["data"]
@@ -97,7 +65,6 @@ def parse_aggregate_stats(html):
         pass
 
     if campaign:
-        # estimatedAmountRaised is inside a nested "stats" object
         stats_obj = campaign.get("stats") or {}
         return {
             "fundraiser_count": _extract_int(campaign, "fundraiserCount"),
@@ -106,7 +73,6 @@ def parse_aggregate_stats(html):
             "team_count": _extract_int(campaign, "teamCount"),
         }
 
-    # Fallback: regex on raw JSON (in case structure changes)
     fc = re.search(r'"fundraiserCount":\s*(\d+)', raw_json)
     ear = re.search(r'"estimatedAmountRaised":\s*"?([\d.]+)', raw_json)
     mg = re.search(r'"monetaryGoal":\s*(\d+)', raw_json)
@@ -124,7 +90,6 @@ def parse_aggregate_stats(html):
 
 
 def _extract_int(obj, key):
-    """Safely pull an integer from a dict, with fallback regex on raw JSON."""
     val = obj.get(key)
     if val is not None:
         return int(val)
@@ -132,7 +97,6 @@ def _extract_int(obj, key):
 
 
 def _extract_float(obj, key):
-    """Safely pull a float (may be stored as string) from a dict."""
     val = obj.get(key)
     if val is not None:
         return float(val)
@@ -144,14 +108,20 @@ def _extract_float(obj, key):
 # ---------------------------------------------------------------------------
 
 def store_snapshot(conn, stats):
-    """Insert or replace today's snapshot row."""
+    """Insert or update today's snapshot row."""
     now = datetime.now(timezone.utc)
     today = now.strftime("%Y-%m-%d")
     conn.execute("""
-        INSERT OR REPLACE INTO kids_snapshots
+        INSERT INTO kids_snapshots
             (snapshot_date, campaign_id, fundraiser_count,
              estimated_amount_raised, monetary_goal, team_count, last_scraped)
-        VALUES (?, ?, ?, ?, ?, ?, ?)
+        VALUES (%s, %s, %s, %s, %s, %s, %s)
+        ON CONFLICT(snapshot_date, campaign_id) DO UPDATE SET
+            fundraiser_count=excluded.fundraiser_count,
+            estimated_amount_raised=excluded.estimated_amount_raised,
+            monetary_goal=excluded.monetary_goal,
+            team_count=excluded.team_count,
+            last_scraped=excluded.last_scraped
     """, (
         today,
         CAMPAIGN_ID,
@@ -173,7 +143,7 @@ def print_summary(conn):
     """Print the latest snapshot from the database."""
     row = conn.execute("""
         SELECT * FROM kids_snapshots
-        WHERE campaign_id = ?
+        WHERE campaign_id = %s
         ORDER BY snapshot_date DESC
         LIMIT 1
     """, (CAMPAIGN_ID,)).fetchone()
@@ -181,16 +151,16 @@ def print_summary(conn):
         print("No snapshots found in database.")
         return
     print("=== Pelotonia Kids — Latest Snapshot ===")
-    print(f"  Date:        {row[0]}")
-    print(f"  Fundraisers: {row[2]}")
-    raised = row[3]
-    goal = row[4]
+    print(f"  Date:        {row['snapshot_date']}")
+    print(f"  Fundraisers: {row['fundraiser_count']}")
+    raised = row["estimated_amount_raised"]
+    goal = row["monetary_goal"]
     pct = (raised / goal * 100) if goal > 0 else 0
     print(f"  Raised:      ${raised:,.2f}")
     print(f"  Goal:        ${goal:,.2f}")
     print(f"  Progress:    {pct:.1f}%")
-    print(f"  Teams:       {row[5]}")
-    print(f"  Scraped:     {row[6]}")
+    print(f"  Teams:       {row['team_count']}")
+    print(f"  Scraped:     {row['last_scraped']}")
 
 
 # ---------------------------------------------------------------------------
@@ -207,38 +177,32 @@ def main():
     )
     args = parser.parse_args()
 
-    conn = sqlite3.connect(str(DB_PATH))
-    init_db(conn)
+    init_schema()
 
-    if args.summary:
-        print_summary(conn)
-        conn.close()
-        return
+    with get_conn() as conn:
+        if args.summary:
+            print_summary(conn)
+            return
 
-    # Scrape
-    print(f"Fetching {CAMPAIGN_URL} ...")
-    try:
-        html = fetch_page(CAMPAIGN_URL)
-    except Exception as exc:
-        print(f"ERROR fetching page: {exc}", file=sys.stderr)
-        conn.close()
-        sys.exit(1)
+        print(f"Fetching {CAMPAIGN_URL} ...")
+        try:
+            html = fetch_page(CAMPAIGN_URL)
+        except Exception as exc:
+            print(f"ERROR fetching page: {exc}", file=sys.stderr)
+            sys.exit(1)
 
-    try:
-        stats = parse_aggregate_stats(html)
-    except ValueError as exc:
-        print(f"ERROR parsing stats: {exc}", file=sys.stderr)
-        conn.close()
-        sys.exit(1)
+        try:
+            stats = parse_aggregate_stats(html)
+        except ValueError as exc:
+            print(f"ERROR parsing stats: {exc}", file=sys.stderr)
+            sys.exit(1)
 
-    today = store_snapshot(conn, stats)
-    print(f"Stored snapshot for {today}:")
-    print(f"  Fundraisers: {stats['fundraiser_count']}")
-    print(f"  Raised:      ${stats['estimated_amount_raised']:,.2f}")
-    print(f"  Goal:        ${stats['monetary_goal']:,.2f}")
-    print(f"  Teams:       {stats['team_count']}")
-
-    conn.close()
+        today = store_snapshot(conn, stats)
+        print(f"Stored snapshot for {today}:")
+        print(f"  Fundraisers: {stats['fundraiser_count']}")
+        print(f"  Raised:      ${stats['estimated_amount_raised']:,.2f}")
+        print(f"  Goal:        ${stats['monetary_goal']:,.2f}")
+        print(f"  Teams:       {stats['team_count']}")
 
 
 if __name__ == "__main__":

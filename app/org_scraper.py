@@ -2,7 +2,7 @@
 """
 Organization Leaderboard Scraper — Pelotonia Top Teams
 
-Fetches aggregate stats for ~25 major Pelotonia organizations (parent teams)
+Fetches aggregate stats for ~31 major Pelotonia organizations (parent teams)
 and stores daily snapshots for leaderboard comparison.
 
 Data per org: name, members_count, sub_team_count, raised, goal, all_time_raised.
@@ -11,18 +11,17 @@ Usage:
   python org_scraper.py                # Scrape + store today's snapshot
   python org_scraper.py --summary      # Print leaderboard from DB
 
-Requires: stdlib only (urllib.request, json, sqlite3, time)
+Requires: urllib.request, json, time, psycopg (via db module)
 """
 
 import argparse
 import json
-import os
-import sqlite3
 import sys
 import time
 import urllib.request
 from datetime import datetime, timezone
-from pathlib import Path
+
+from db import get_conn, init_schema
 
 # ---------------------------------------------------------------------------
 # Config
@@ -30,11 +29,6 @@ from pathlib import Path
 API_BASE = "https://pelotonia-p3-middleware-production.azurewebsites.net/api"
 RATE_LIMIT = 0.5  # seconds between API calls
 
-SCRIPT_DIR = Path(__file__).resolve().parent
-DB_PATH = Path(os.environ.get("PELOTONIA_DB", SCRIPT_DIR / "pelotonia_data.db"))
-
-# Hardcoded parent team IDs — these are stable year to year.
-# Discovered via API search; only parent orgs (no sub-teams).
 ORGS = {
     "a0s3t00000BKX8sAAH": "Team Huntington Bank",
     "a0s3t00000BKX8tAAH": "Team Buckeye",
@@ -69,27 +63,6 @@ ORGS = {
     "a0sQj00000DUFOjIAP": "Fahey Bank",
 }
 
-# ---------------------------------------------------------------------------
-# Database
-# ---------------------------------------------------------------------------
-
-def init_db(conn):
-    """Create the org_snapshots table if it doesn't exist."""
-    conn.executescript("""
-        CREATE TABLE IF NOT EXISTS org_snapshots (
-            snapshot_date TEXT NOT NULL,
-            team_id TEXT NOT NULL,
-            name TEXT,
-            members_count INTEGER DEFAULT 0,
-            sub_team_count INTEGER DEFAULT 0,
-            raised REAL DEFAULT 0,
-            goal REAL DEFAULT 0,
-            all_time_raised REAL DEFAULT 0,
-            last_scraped TEXT,
-            PRIMARY KEY (snapshot_date, team_id)
-        );
-    """)
-
 
 # ---------------------------------------------------------------------------
 # API
@@ -109,7 +82,7 @@ def api_get(path, retries=3):
         except Exception:
             if attempt == retries - 1:
                 raise
-            time.sleep(1 + attempt)  # 1s, 2s backoff
+            time.sleep(1 + attempt)
 
 
 def fetch_org(team_id):
@@ -131,13 +104,19 @@ def fetch_org(team_id):
 # ---------------------------------------------------------------------------
 
 def store_snapshots(conn, snapshots, today, now_iso):
-    """Insert or replace today's snapshot rows for all orgs."""
+    """Insert or update today's snapshot rows for all orgs."""
     for team_id, stats in snapshots.items():
         conn.execute("""
-            INSERT OR REPLACE INTO org_snapshots
+            INSERT INTO org_snapshots
                 (snapshot_date, team_id, name, members_count, sub_team_count,
                  raised, goal, all_time_raised, last_scraped)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+            VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s)
+            ON CONFLICT(snapshot_date, team_id) DO UPDATE SET
+                name=excluded.name, members_count=excluded.members_count,
+                sub_team_count=excluded.sub_team_count,
+                raised=excluded.raised, goal=excluded.goal,
+                all_time_raised=excluded.all_time_raised,
+                last_scraped=excluded.last_scraped
         """, (
             today, team_id, stats["name"], stats["members_count"],
             stats["sub_team_count"], stats["raised"], stats["goal"],
@@ -152,17 +131,16 @@ def store_snapshots(conn, snapshots, today, now_iso):
 
 def print_summary(conn):
     """Print the latest leaderboard from the database."""
-    # Get the most recent snapshot date
-    row = conn.execute("SELECT MAX(snapshot_date) FROM org_snapshots").fetchone()
-    if not row or not row[0]:
+    row = conn.execute("SELECT MAX(snapshot_date) as max_date FROM org_snapshots").fetchone()
+    if not row or not row["max_date"]:
         print("No snapshots found in database.")
         return
 
-    latest = row[0]
+    latest = row["max_date"]
     rows = conn.execute("""
         SELECT name, members_count, sub_team_count, raised, goal, all_time_raised
         FROM org_snapshots
-        WHERE snapshot_date = ?
+        WHERE snapshot_date = %s
         ORDER BY raised DESC
     """, (latest,)).fetchall()
 
@@ -170,8 +148,8 @@ def print_summary(conn):
     print(f"{'Rank':>4}  {'Organization':<40} {'Members':>7} {'Raised':>12} {'All-Time':>14}")
     print("-" * 85)
     for i, r in enumerate(rows, 1):
-        marker = " *" if "Huntington" in (r[0] or "") else ""
-        print(f"{i:>4}  {r[0]:<40} {r[1]:>7} ${r[3]:>11,.2f} ${r[5]:>13,.2f}{marker}")
+        marker = " *" if "Huntington" in (r["name"] or "") else ""
+        print(f"{i:>4}  {r['name']:<40} {r['members_count']:>7} ${r['raised']:>11,.2f} ${r['all_time_raised']:>13,.2f}{marker}")
     print(f"\n  {len(rows)} organizations tracked  |  * = Team Huntington")
 
 
@@ -189,57 +167,49 @@ def main():
     )
     args = parser.parse_args()
 
-    conn = sqlite3.connect(str(DB_PATH))
-    init_db(conn)
+    init_schema()
 
-    if args.summary:
-        print_summary(conn)
-        conn.close()
-        return
+    with get_conn() as conn:
+        if args.summary:
+            print_summary(conn)
+            return
 
-    # Scrape all orgs
-    now = datetime.now(timezone.utc)
-    today = now.strftime("%Y-%m-%d")
-    now_iso = now.isoformat()
-    total = len(ORGS)
-    snapshots = {}
-    errors = []
+        now = datetime.now(timezone.utc)
+        today = now.strftime("%Y-%m-%d")
+        now_iso = now.isoformat()
+        total = len(ORGS)
+        snapshots = {}
+        errors = []
 
-    print(f"Fetching {total} organizations...")
-    for i, (team_id, fallback_name) in enumerate(ORGS.items(), 1):
-        try:
-            stats = fetch_org(team_id)
-            snapshots[team_id] = stats
-            print(f"  [{i}/{total}] {stats['name']}: {stats['members_count']} members, ${stats['raised']:,.2f} raised")
-        except Exception as exc:
-            errors.append(f"{fallback_name}: {exc}")
-            print(f"  [{i}/{total}] ERROR {fallback_name}: {exc}", file=sys.stderr)
+        print(f"Fetching {total} organizations...")
+        for i, (team_id, fallback_name) in enumerate(ORGS.items(), 1):
+            try:
+                stats = fetch_org(team_id)
+                snapshots[team_id] = stats
+                print(f"  [{i}/{total}] {stats['name']}: {stats['members_count']} members, ${stats['raised']:,.2f} raised")
+            except Exception as exc:
+                errors.append(f"{fallback_name}: {exc}")
+                print(f"  [{i}/{total}] ERROR {fallback_name}: {exc}", file=sys.stderr)
 
-        if i < total:
-            time.sleep(RATE_LIMIT)
+            if i < total:
+                time.sleep(RATE_LIMIT)
 
-    # Store — refuse to save partial results (>20% failure likely means
-    # transient API issue; storing would overwrite good data for today)
-    min_required = int(total * 0.8)
-    if len(snapshots) < min_required:
-        print(f"\nOnly {len(snapshots)}/{total} orgs fetched (need {min_required}). "
-              f"Skipping storage to avoid partial data.", file=sys.stderr)
-        conn.close()
-        sys.exit(1)
-    elif snapshots:
-        store_snapshots(conn, snapshots, today, now_iso)
-        print(f"\nStored {len(snapshots)} org snapshots for {today}")
-    else:
-        print("No data fetched — nothing stored.", file=sys.stderr)
-        conn.close()
-        sys.exit(1)
+        min_required = int(total * 0.8)
+        if len(snapshots) < min_required:
+            print(f"\nOnly {len(snapshots)}/{total} orgs fetched (need {min_required}). "
+                  f"Skipping storage to avoid partial data.", file=sys.stderr)
+            sys.exit(1)
+        elif snapshots:
+            store_snapshots(conn, snapshots, today, now_iso)
+            print(f"\nStored {len(snapshots)} org snapshots for {today}")
+        else:
+            print("No data fetched — nothing stored.", file=sys.stderr)
+            sys.exit(1)
 
-    if errors:
-        print(f"\n{len(errors)} errors:", file=sys.stderr)
-        for e in errors:
-            print(f"  - {e}", file=sys.stderr)
-
-    conn.close()
+        if errors:
+            print(f"\n{len(errors)} errors:", file=sys.stderr)
+            for e in errors:
+                print(f"  - {e}", file=sys.stderr)
 
 
 if __name__ == "__main__":
