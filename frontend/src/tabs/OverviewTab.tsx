@@ -180,6 +180,19 @@ export function OverviewTab() {
         <div className={layoutStyles.card}>
           <h2 className={layoutStyles.cardTitle}>Fundraising Growth</h2>
           <FundraisingGrowthChart />
+          <div
+            style={{
+              fontSize: '11px',
+              color: '#888',
+              marginTop: '6px',
+              fontStyle: 'italic',
+            }}
+          >
+            * Reflects only donations Pelotonia exposes record-by-record.
+            Excludes general peloton funds and donations to members with
+            hidden donor lists, so the cumulative total runs below the
+            team's official 2026 raised figure.
+          </div>
         </div>
         <div className={layoutStyles.card}>
           <h2 className={layoutStyles.cardTitle}>Participant Signups Over Time</h2>
