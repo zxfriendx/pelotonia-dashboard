@@ -49,6 +49,12 @@ def _get_overview(conn):
         "SELECT name, raised, COALESCE(goal_override, goal) as goal, all_time_raised, members_count, general_peloton_funds FROM teams WHERE id=?",
         (PARENT_TEAM_ID,),
     ).fetchone()
+    subteam_raised = conn.execute(
+        "SELECT COALESCE(SUM(raised),0) as s FROM teams WHERE parent_id=?",
+        (PARENT_TEAM_ID,),
+    ).fetchone()["s"]
+    parent_gpf = parent["general_peloton_funds"] if parent else 0
+    raised_total = subteam_raised + parent_gpf
     members = conn.execute("SELECT COUNT(*) as cnt FROM members").fetchone()["cnt"]
     donations = conn.execute("SELECT COUNT(*) as cnt FROM donations").fetchone()["cnt"]
     total_donated = conn.execute("SELECT COALESCE(SUM(amount),0) as s FROM donations").fetchone()["s"]
@@ -73,7 +79,7 @@ def _get_overview(conn):
     """).fetchone()
     return {
         "team_name": parent["name"] if parent else "Team Huntington Bank",
-        "raised": parent["raised"] if parent else 0,
+        "raised": raised_total,
         "goal": parent["goal"] if parent else 0,
         "all_time_raised": parent["all_time_raised"] if parent else 0,
         "members_count": members,

@@ -89,7 +89,7 @@ export function OverviewTab() {
       label: '2026 FUNDS RAISED',
       current: overview.raised || 0,
       target: targets.raised ?? goalDefaults.raised,
-      fmt: (v) => '$' + v.toLocaleString(),
+      fmt: (v) => '$' + Math.round(v / 1000).toLocaleString() + 'K',
     },
   ];
 
@@ -122,7 +122,7 @@ export function OverviewTab() {
                       style={{ width: `${gp}%` }}
                     />
                     <div
-                      className={`${styles.goalArrowWrap} ${gp > 80 ? styles.goalArrowFlipped : ''}`}
+                      className={styles.goalArrowWrap}
                       style={{ left: `${gp}%` }}
                     >
                       <img
