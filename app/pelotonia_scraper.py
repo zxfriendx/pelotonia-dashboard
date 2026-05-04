@@ -965,6 +965,57 @@ def scrape_incremental(conn):
     log.info(f"Incremental scrape complete in {elapsed:.0f}s")
 
 
+def scrape_profile_rescan(conn):
+    """Weekly true-up: re-fetch every member's profile so participation-type flags
+    (is_rider/is_challenger/is_volunteer) reflect their *current* registration,
+    not whatever they originally signed up as. Also zeroes out flags for any
+    member who hasn't been on a roster for 7+ days, so the dashboard stops
+    counting departed members.
+
+    Cost: ~17 team calls + ~14 roster calls + N profile calls (one per member,
+    ~3400 today). At REQUEST_DELAY=0.5s, expect roughly 30 minutes.
+    """
+    start = time.time()
+    log.info("Starting weekly profile rescan...")
+
+    scrape_rides_and_routes(conn)
+    team_ids = scrape_teams(conn)
+    sub_team_ids = [tid for tid in team_ids if tid != PARENT_TEAM_ID]
+
+    pre_member_ids = {row[0] for row in conn.execute("SELECT public_id FROM members")}
+    scrape_members(conn, sub_team_ids)
+
+    # Re-fetch profile for every member currently in the DB (including ghosts —
+    # the API still returns their profile, with flags reflecting their current state).
+    all_ids = [row[0] for row in conn.execute("SELECT public_id FROM members ORDER BY public_id")]
+    log.info(f"Rescanning profiles for {len(all_ids)} members (~{len(all_ids) * REQUEST_DELAY / 60:.0f} min)...")
+    scrape_member_profiles(conn, all_ids)
+
+    # Zero out participation flags for members not seen on any roster in 7+ days.
+    # We keep the row (donation history, etc.) but stop counting them as active.
+    cutoff = (datetime.now(timezone.utc) - timedelta(days=7)).isoformat()
+    cleared = conn.execute("""
+        UPDATE members
+        SET is_rider=0, is_challenger=0, is_volunteer=0
+        WHERE last_scraped < ?
+          AND (is_rider=1 OR is_challenger=1 OR is_volunteer=1)
+    """, (cutoff,)).rowcount
+    if cleared:
+        log.info(f"Cleared participation flags on {cleared} members gone 7+ days")
+
+    new_member_ids = {row[0] for row in conn.execute("SELECT public_id FROM members")} - pre_member_ids
+    if new_member_ids:
+        log.info(f"Fetching routes for {len(new_member_ids)} new members...")
+        scrape_member_routes(conn, list(new_member_ids))
+
+    build_donor_identities(conn)
+    record_daily_snapshot(conn)
+    conn.commit()
+
+    elapsed = time.time() - start
+    log.info(f"Profile rescan complete in {elapsed:.0f}s")
+
+
 def build_donor_identities(conn):
     """Cross-reference anonymous donations with non-anonymous ones to de-anonymize."""
     log.info("Building donor identity map...")
@@ -1150,6 +1201,10 @@ def main():
     parser.add_argument("--skip-profiles", action="store_true", help="Skip extended profile scraping")
     parser.add_argument("--incremental", action="store_true",
                         help="Incremental scrape: only fetch new data (ideal for daily cron)")
+    parser.add_argument("--profile-rescan", action="store_true",
+                        help="Weekly true-up: refresh teams+rosters, then re-fetch every "
+                             "member profile to catch participation-type changes; "
+                             "zero out flags for members gone 7+ days")
     parser.add_argument("--backfill-donations", action="store_true",
                         help="Fetch donations for members with raised > 0 but no donation records")
     args = parser.parse_args()
@@ -1190,6 +1245,13 @@ def main():
     # Incremental mode (for daily cron jobs)
     if args.incremental:
         scrape_incremental(conn)
+        print_summary(conn)
+        conn.close()
+        return
+
+    # Weekly profile rescan: re-fetch every profile to catch type changes
+    if args.profile_rescan:
+        scrape_profile_rescan(conn)
         print_summary(conn)
         conn.close()
         return
