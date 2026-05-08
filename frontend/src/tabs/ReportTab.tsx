@@ -168,7 +168,7 @@ export function ReportTab() {
   if (!bundle || !computed) return null;
 
   const now = new Date();
-  const campaignDay = Math.max(Math.floor((now.getTime() - REGISTRATION_OPEN.getTime()) / 86400000), 0);
+  const campaignDay = Math.max(Math.floor((now.getTime() - REGISTRATION_OPEN.getTime()) / 86400000) + 1, 1);
   const daysToRide = Math.max(Math.floor((RIDE_WEEKEND.getTime() - now.getTime()) / 86400000), 0);
 
   const {

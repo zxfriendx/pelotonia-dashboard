@@ -573,7 +573,8 @@ def _get_subteam_snapshots(conn):
     """Recent daily snapshots for each sub-team (last 8 days for weekly delta)."""
     cutoff = (__import__('datetime').datetime.now() - __import__('datetime').timedelta(days=8)).strftime("%Y-%m-%d")
     rows = conn.execute("""
-        SELECT ds.snapshot_date, t.name, ds.raised, ds.members_count
+        SELECT ds.snapshot_date, ds.team_id, t.name AS team_name,
+               ds.raised, ds.all_time_raised, ds.members_count
         FROM daily_snapshots ds
         JOIN teams t ON ds.team_id=t.id
         WHERE t.parent_id=? AND ds.snapshot_date>=?

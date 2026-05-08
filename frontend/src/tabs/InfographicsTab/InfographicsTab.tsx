@@ -71,7 +71,7 @@ export function InfographicsTab() {
 
   // Timeline calculations
   const now = new Date();
-  const regDay = Math.max(1, Math.ceil((now.getTime() - REGISTRATION_OPEN.getTime()) / 86400000) + 1);
+  const regDay = Math.max(1, Math.floor((now.getTime() - REGISTRATION_OPEN.getTime()) / 86400000) + 1);
   const daysToRide = Math.max(0, Math.ceil((RIDE_WEEKEND.getTime() - now.getTime()) / 86400000));
   const daysToClose = Math.max(0, Math.ceil((FUNDRAISING_CLOSE.getTime() - now.getTime()) / 86400000));
   const fundsDaysTotal = Math.ceil((FUNDRAISING_CLOSE.getTime() - REGISTRATION_OPEN.getTime()) / 86400000);
