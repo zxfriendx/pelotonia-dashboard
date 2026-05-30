@@ -150,8 +150,9 @@ conn.execute("UPDATE teams SET goal_override = 6000000 WHERE parent_id IS NULL")
 .venv/bin/python pelotonia_scraper.py --trueup
 ```
 
-### Systemd automation
-- `pelotonia-scraper.timer` — fires daily at 11:00 UTC (7am ET)
-- `pelotonia-scraper.service` — runs `--incremental`, triggers GCP deploy on success
-- Check: `systemctl --user status pelotonia-scraper.timer`
-- Logs: `journalctl --user -u pelotonia-scraper.service`
+### Cron automation
+Scheduling is via cron (an earlier systemd-timer chain was retired 2026-05-30 to avoid double-runs). The scrape and GCP deploy are chained so the deploy waits for the scraper's atomic commit:
+- **3×/day** at 11:00 / 17:00 / 23:00 UTC (7am / 1pm / 7pm ET): `--incremental` + Kids + Org scrapers, then `deploy-gcp.sh`
+- **Weekly true-up** Sundays 09:00 UTC: `--trueup`, then `deploy-gcp.sh`
+- View: `crontab -l`
+- Logs: `tail -f scraper.log`

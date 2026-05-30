@@ -213,13 +213,14 @@ bash deploy-gcp.sh   # Manual deploy
 
 ### Auto-Deploy Chain
 
+Scheduling is handled by **cron** (see [Scheduled Jobs](#scheduled-jobs)). The scrape and deploy are chained in a single cron entry so the GCP image is rebuilt only *after* the scraper's atomic commit lands — preventing stale data from being baked into the container:
+
 ```
-pelotonia-scraper.timer (11:00 UTC / 7am ET daily)
-  → ExecStartPre: org_scraper.py
-  → ExecStartPre: pledgeit_scraper.py
-  → pelotonia_scraper.py --incremental
-  → OnSuccess: pelotonia-deploy.service (GCP Cloud Run redeploy)
-    → OnSuccess: pelotonia-report.service (daily email report)
+# 3× daily at 11:00 / 17:00 / 23:00 UTC (7am / 1pm / 7pm ET)
+pelotonia_scraper.py --incremental \
+  && pledgeit_scraper.py \
+  && org_scraper.py \
+  && deploy-gcp.sh            # GCP Cloud Run redeploy
 ```
 
 ### Kubernetes (Shakudo/AWS)
@@ -244,20 +245,20 @@ kubectl apply -f k8s/cronjob.yaml
 
 ## Scheduled Jobs
 
-All services run as **user-level systemd units** (linger enabled).
+Scheduled work runs via **cron** (`crontab -l`). The only long-running systemd user unit is the local dashboard service. (An earlier systemd-timer chain — `pelotonia-scraper.timer` / `pelotonia-weekly-report.timer` and their `pelotonia-deploy` / `pelotonia-report` services — was retired in favor of cron; those timers are disabled to avoid double-runs.)
 
-| Service | Schedule | Description |
-|---------|----------|-------------|
-| `pelotonia-scraper.timer` | Daily at 11:00 UTC (7am ET) | Org scraper → Kids scraper → Main scraper (incremental) |
-| `pelotonia-deploy.service` | On scraper success | GCP Cloud Run redeploy |
-| `pelotonia-report.service` | On deploy success | Daily email report |
-| `pelotonia-weekly-report.timer` | Thursdays 11:00 UTC | Weekly email report |
-| `pelotonia-dashboard.service` | Always running | Flask dashboard on port 5050 |
+| Job | Schedule (UTC) | Description |
+|-----|----------------|-------------|
+| Scrape + deploy | 11:00, 17:00, 23:00 daily | Main (incremental) + Kids + Org scrapers, then GCP redeploy |
+| Daily report | 11:30 daily | Daily email report (30 min after morning scrape) |
+| Weekly report | 11:35 Thursdays | Weekly email report (7-day deltas) |
+| Weekly true-up | 09:00 Sundays | `pelotonia_scraper.py --trueup` (prune departed members + refresh every profile), then deploy |
+| `pelotonia-dashboard.service` (systemd) | always running | Flask dashboard on port 5050 (auto-restarts, starts on boot via linger) |
 
 ```bash
-systemctl --user status pelotonia-scraper.timer
-systemctl --user list-timers
-journalctl --user -u pelotonia-scraper.service -n 50
+crontab -l                                          # view scheduled jobs
+tail -f scraper.log                                 # scrape / report output
+systemctl --user status pelotonia-dashboard.service
 ```
 
 ---
@@ -298,19 +299,24 @@ python3 -m venv .venv
 .venv/bin/python dashboard.py --port 5050    # Start the dashboard
 ```
 
-### Enable Systemd Services
+### Enable the Dashboard Service & Scheduled Jobs
+
+The dashboard runs as a long-running systemd user service; all scheduled work is cron.
 
 ```bash
+# Long-running dashboard (auto-restart, start on boot)
 systemctl --user daemon-reload
 systemctl --user enable --now pelotonia-dashboard.service
-systemctl --user enable --now pelotonia-scraper.timer
-systemctl --user enable --now pelotonia-weekly-report.timer
+loginctl enable-linger "$USER"          # keep user services running after logout
+
+# Scheduled jobs — add the cron entries (see Scheduled Jobs above)
+crontab -e
 ```
 
 ---
 
 ## Known Issues
 
-1. **Timer fires at 11:00 UTC (7am EDT / 6am EST)** — Not adjusted for DST.
+1. **Cron fires at fixed UTC times (e.g. 11:00 UTC = 7am EDT / 6am EST)** — Not adjusted for DST.
 2. **Hidden donor lists** — 83 members have raised > 0 but `is_donor_list_visible=0`, so their individual donation records can't be fetched via the API.
 3. **General peloton funds gap** — `general_peloton_funds` (~$18k) are credited to the parent team but not to individual members. The overview `raised` figure is the sum of sub-team `raised` plus this amount, so the headline number reconciles with the sub-team breakdown. The Fundraising Growth chart sums only record-by-record donations and runs below this figure (footnoted on the Overview tab).
