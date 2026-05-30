@@ -48,23 +48,37 @@ export function ReportTab() {
 
     const filteredTeam = !filterAll ? teamBreakdown.find((t) => t.name === subteamFilter) : null;
 
+    // Snapshots are end-of-day. Today's row was just written by the morning
+    // scrape, so it reflects overnight only — comparing it to yesterday hides
+    // the signups that actually happened during the most recent full day.
+    // Use yesterday's snapshot as "latest" in daily mode so the delta covers
+    // a complete day's activity.
+    const todayStr = new Date().toISOString().slice(0, 10);
     const snap = signupTimeline || [];
-    const today = snap.length ? snap[snap.length - 1] : null;
+    let latestIdx = snap.length - 1;
+    if (!isWeekly && latestIdx >= 0 && snap[latestIdx].snapshot_date === todayStr && latestIdx > 0) {
+      latestIdx -= 1;
+    }
+    const today = latestIdx >= 0 ? snap[latestIdx] : null;
     let compare = null;
-    if (snap.length > lookbackDays) {
-      compare = snap[snap.length - 1 - lookbackDays];
-    } else if (snap.length > 1) {
+    if (latestIdx - lookbackDays >= 0) {
+      compare = snap[latestIdx - lookbackDays];
+    } else if (latestIdx > 0) {
       compare = snap[0];
     }
 
     // Sub-team deltas
     const stSnaps = subteamSnapshots || [];
     const dates = [...new Set(stSnaps.map((s) => s.snapshot_date))].sort();
-    const latestDate = dates.length ? dates[dates.length - 1] : null;
+    let latestDateIdx = dates.length - 1;
+    if (!isWeekly && latestDateIdx >= 0 && dates[latestDateIdx] === todayStr && latestDateIdx > 0) {
+      latestDateIdx -= 1;
+    }
+    const latestDate = latestDateIdx >= 0 ? dates[latestDateIdx] : null;
     let compareDate: string | null = null;
-    if (dates.length > lookbackDays) {
-      compareDate = dates[dates.length - 1 - lookbackDays];
-    } else if (dates.length > 1) {
+    if (latestDateIdx - lookbackDays >= 0) {
+      compareDate = dates[latestDateIdx - lookbackDays];
+    } else if (latestDateIdx > 0) {
       compareDate = dates[0];
     }
 
@@ -168,7 +182,7 @@ export function ReportTab() {
   if (!bundle || !computed) return null;
 
   const now = new Date();
-  const campaignDay = Math.max(Math.floor((now.getTime() - REGISTRATION_OPEN.getTime()) / 86400000), 0);
+  const campaignDay = Math.max(Math.floor((now.getTime() - REGISTRATION_OPEN.getTime()) / 86400000) + 1, 1);
   const daysToRide = Math.max(Math.floor((RIDE_WEEKEND.getTime() - now.getTime()) / 86400000), 0);
 
   const {

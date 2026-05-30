@@ -37,14 +37,14 @@ A single-page Flask application with 11 tabs providing fundraising analytics.
 | **Overview** | Goals panel (editable targets), Fundraising Growth chart, Participant Signups Over Time, Participant Types by Sub-Team, Raised by Sub-Team |
 | **Teams** | 2026 Goals & Progress table (all sub-teams), Participant Types chart, Raised by Sub-Team chart |
 | **Routes & Events** | Signature Ride & Gravel Day signup totals + route tables with member drill-down modals |
-| **Members** | KPI cards, searchable/sortable member table with donation modals, cross-tab navigation |
+| **Members** | KPI cards, searchable/sortable member table (incl. "Signed Up" date column) with donation modals, cross-tab navigation |
 | **Donors** | Top donors table with recipient breakdown modals |
 | **Companies** | Corporate donor analytics |
 | **Donations** | Donation feed table with search |
 | **Infographics** | Thermometer visualizations per team, editable targets, campaign timeline, prior-year benchmarks |
 | **Daily Report** | Email-style report view with daily/weekly toggle, sub-team filter, KPI cards, top movers |
 | **Pelotonia Kids** | 5 KPIs + 2 line charts from PledgeIt campaign data |
-| **Leaderboard** | Organization comparison — 4 KPIs, sortable table (Huntington highlighted), top-15 bar chart |
+| **Leaderboard** | Organization comparison — 4 KPIs, sortable table (Huntington highlighted; incl. Riders column), top-15 bar chart |
 
 ### Cross-Tab Drill-Downs
 
@@ -64,7 +64,7 @@ All endpoints return JSON.
 | Endpoint | Description |
 |----------|-------------|
 | `GET /api/bundle` | **Primary** — all 20 data sets in one response (mtime-cached) |
-| `GET /api/overview` | Team KPIs: raised, goal, members, donors, survivors, high rollers |
+| `GET /api/overview` | Team KPIs: raised (sub-team totals + parent general peloton funds), goal, members, donors, survivors, high rollers |
 | `GET /api/teams` | Sub-teams sorted by raised |
 | `GET /api/fundraising-timeline` | Cumulative and daily donation amounts over time |
 | `GET /api/snapshots` | Historical daily snapshots (parent team) |
@@ -129,6 +129,9 @@ Public, unauthenticated. Header-based pagination (`Pagination-Page`, `Pagination
 # Incremental scrape (~19 seconds, ~34 API calls) — used by daily cron
 .venv/bin/python pelotonia_scraper.py --incremental
 
+# Weekly true-up — incremental + prune departed members + refresh every profile
+.venv/bin/python pelotonia_scraper.py --trueup
+
 # Backfill donations for members with raised > 0 but no records
 .venv/bin/python pelotonia_scraper.py --backfill-donations
 
@@ -153,11 +156,13 @@ python app/pledgeit_scraper.py --summary   # Print latest snapshot
 
 ### Organization Leaderboard Scraper
 
-Fetches aggregate stats for ~31 parent Pelotonia organizations via the `peloton/{id}` endpoint.
+Fetches aggregate stats for ~31 parent Pelotonia organizations via the `peloton/{id}` endpoint, plus a per-org rider/challenger/volunteer breakdown derived by walking each org's sub-peloton tree and reading `participantTypes` from member profiles. Profiles are cached (`org_member_profiles`, 14-day staleness window), so most runs only fetch newcomers.
 
 ```bash
-python app/org_scraper.py             # Scrape all orgs
-python app/org_scraper.py --summary   # Print leaderboard
+python app/org_scraper.py                       # Scrape all orgs (incl. participant breakdown)
+python app/org_scraper.py --summary             # Print leaderboard
+python app/org_scraper.py --skip-profiles       # Aggregate stats only (no participant walk)
+python app/org_scraper.py --refresh-all-profiles  # Force re-fetch of every cached profile
 ```
 
 ---
@@ -171,7 +176,7 @@ SQLite at `app/pelotonia_data.db` (default). Override with `PELOTONIA_DB` env va
 | Table | Description |
 |-------|-------------|
 | `teams` | 15 sub-teams — name, raised, goal, goal_override, all_time_raised, members_count |
-| `members` | ~300+ members — name, team, participation type, raised, committed, tags, story |
+| `members` | ~300+ members — name, team, participation type, raised, committed, tags, story, first_scraped (signup date) |
 | `donations` | Individual donation records — amount, date, donor name, recipient, anonymity flags |
 | `donor_identities` | Cross-referenced anonymous donor names with confidence levels |
 | `rides` | Ride catalog (Signature Ride, Gravel Day) |
@@ -180,7 +185,8 @@ SQLite at `app/pelotonia_data.db` (default). Override with `PELOTONIA_DB` env va
 | `daily_snapshots` | One row per team per day — raised, goal, members, signature/gravel riders |
 | `events` | Historical event metadata (2012-2026) |
 | `kids_snapshots` | Pelotonia Kids aggregate stats per day (from PledgeIt) |
-| `org_snapshots` | Organization leaderboard stats per day (~31 orgs) |
+| `org_snapshots` | Organization leaderboard stats per day (~31 orgs), incl. rider/challenger/volunteer counts |
+| `org_member_profiles` | Cached participant-type flags per org member (feeds the leaderboard breakdown) |
 
 ### Entity Relationship
 
@@ -307,4 +313,4 @@ systemctl --user enable --now pelotonia-weekly-report.timer
 
 1. **Timer fires at 11:00 UTC (7am EDT / 6am EST)** — Not adjusted for DST.
 2. **Hidden donor lists** — 83 members have raised > 0 but `is_donor_list_visible=0`, so their individual donation records can't be fetched via the API.
-3. **General peloton funds gap** — The parent team's `raised` includes `general_peloton_funds` (~$18k) not attributed to individual members. Surfaced as a footnote on the Overview goals panel.
+3. **General peloton funds gap** — `general_peloton_funds` (~$18k) are credited to the parent team but not to individual members. The overview `raised` figure is the sum of sub-team `raised` plus this amount, so the headline number reconciles with the sub-team breakdown. The Fundraising Growth chart sums only record-by-record donations and runs below this figure (footnoted on the Overview tab).

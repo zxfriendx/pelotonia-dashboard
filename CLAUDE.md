@@ -9,7 +9,7 @@ Data is sourced from the Pelotonia API, PledgeIt campaign page, and organization
   - `pelotonia_scraper.py` — Scrapes Pelotonia API for team/member/donation/route data into SQLite
   - `pledgeit_scraper.py` — Scrapes aggregate Pelotonia Kids stats from PledgeIt campaign page
   - `org_scraper.py` — Scrapes aggregate stats for ~31 top Pelotonia parent organizations from the API
-  - `pelotonia_data.db` — SQLite database (teams, members, donations, member_routes, daily_snapshots, events, routes, rides, donor_identities, kids_snapshots, org_snapshots)
+  - `pelotonia_data.db` — SQLite database (teams, members, donations, member_routes, daily_snapshots, events, routes, rides, donor_identities, kids_snapshots, org_snapshots, org_member_profiles)
   - `dashboard.py` — Flask dashboard (port 5050) with fundraising, routes, members, donor analytics, kids tracking
   - `daily_report.py` — Daily/weekly email report with HTML + PNG infographic attachment, sent via SMTP
   - `SCRAPER.md` — Scraper technical guide
@@ -39,7 +39,9 @@ Data is sourced from the Pelotonia API, PledgeIt campaign page, and organization
 - **Ticker API**: Same base URL + `/ticker` — returns `currentYearRaised`, `totalParticipants`, `allTimeRaised`. Dashboard maps these to `pelotonia_total_raised`, `pelotonia_member_count`, `pelotonia_all_time_raised`. Cached to `.ticker_cache.json` for resilience.
 - **Pagination**: Header-based (`Pagination-Page`, `Pagination-Limit`)
 - **Incremental mode**: `--incremental` refreshes teams+members (~34 API calls when stable), plus profiles for new/stale/old (7+ days) members, re-fetches routes for refreshed members, and donations only for members whose raised amount changed. Full scrape ~4min.
+- **True-up mode**: `--trueup` runs the incremental scrape, then (a) soft-prunes members not seen this run — clears `team_id`, zeros participation flags, and removes their `member_routes`, but keeps the rows so donation history (NOT NULL FK to `members.public_id`) survives — and (b) re-fetches every surviving member's profile so participation flags are authoritative. Run weekly to reconcile the DB with departures the daily incremental never removes.
 - **Backfill mode**: `--backfill-donations` fetches donations for members with raised > 0 but no donation records (one-time catch-up)
+- **first_scraped**: Members table records `first_scraped` (set once on insert, backfilled from `last_scraped` for pre-existing rows) — surfaced as the "Signed Up" column on the Members tab
 - **Atomic commits**: All scrape changes committed in a single transaction at the end, preventing dashboard from serving partial data mid-scrape
 - **Busy timeout**: Scraper uses `timeout=30` and `busy_timeout=30000` on SQLite connection to coexist with Flask reads
 - **Daily snapshots**: `daily_snapshots` table tracks fundraising totals per team per day
@@ -57,17 +59,17 @@ Data is sourced from the Pelotonia API, PledgeIt campaign page, and organization
 - 5 simple cards: First Year Riders, Signature Riders, Gravel Riders, Cancer Survivors, High Rollers
 
 ### Tabs (11 total)
-- **Overview**: Pelotonia-branded goals panel (editable targets via localStorage, campaign arrow asset, friendly timestamp), Fundraising Growth dual-axis chart (cumulative line + daily bars), Participant Signups Over Time (Riders/Challengers/Volunteers lines), Participant Types by Sub-Team chart, Raised by Sub-Team chart
+- **Overview**: Pelotonia-branded goals panel (editable targets via localStorage, campaign arrow asset, friendly timestamp; funds goal renders as `$XK`), Fundraising Growth dual-axis chart (cumulative line + daily bars) with a footnote that the cumulative total reflects only record-by-record donations and runs below the official raised figure, Participant Signups Over Time (Riders/Challengers/Volunteers lines), Participant Types by Sub-Team chart, Raised by Sub-Team chart
 - **Teams**: 2026 Goals & Progress table (all sub-teams), Participant Types by Sub-Team chart, Raised by Sub-Team chart
 - **Routes & Events**: Signature Ride & Gravel Day signup totals + vertical bar chart (Raised vs Committed) + route tables with member drill-down modals
-- **Members**: KPI cards (member count, unique donors, avg donors/member), searchable/sortable member table with donation modals, column header click-to-sort (Name, Sub-Team, Type, Years, Raised, All-Time), cross-tab navigation from other tabs
+- **Members**: KPI cards (member count, unique donors, avg donors/member), searchable/sortable member table with donation modals, column header click-to-sort (Name, Sub-Team, Type, Years, Raised, All-Time, Signed Up), "Signed Up" column from `first_scraped`, cross-tab navigation from other tabs
 - **Donors**: Top donors table with recipient breakdown modals
 - **Companies**: Corporate donor analytics with drill-down modal (matches by recognition_name)
 - **Donations**: Donation feed table with search
 - **Infographics**: Thermometer-style visualizations per team, editable targets via localStorage, campaign timeline calculations, prior-year benchmarking
-- **Daily Report**: Email-style report view with daily/weekly toggle, sub-team filter, KPI cards, top movers, compact sub-team participation table
+- **Daily Report**: Email-style report view with daily/weekly toggle, sub-team filter, KPI cards, top movers, compact sub-team participation table. In daily mode, when today's (just-written, overnight-only) snapshot is the latest row, it falls back to yesterday's snapshot as "latest" so the delta covers a complete day of activity
 - **Pelotonia Kids**: 5 KPIs (fundraisers, raised, goal, progress %, teams) + 2 line charts from PledgeIt campaign data
-- **Leaderboard**: Organization comparison — 4 KPIs, sortable table, top-15 bar chart
+- **Leaderboard**: Organization comparison — 4 KPIs, sortable table (incl. Riders column from per-org participant breakdown), top-15 bar chart
 
 ### Chart Features
 - Chart.js with chartjs-plugin-datalabels (registered globally — all charts must explicitly set `datalabels: { display: false }` unless they use labels)
@@ -114,6 +116,11 @@ Scrapers run 3× daily at 7am, 1pm, 7pm ET (11:00, 17:00, 23:00 UTC). Scrape and
 0 11,17,23 * * * cd /home/zabx/source/pelotonia-dashboard && export PATH="$HOME/google-cloud-sdk/bin:$PATH" && app/.venv/bin/python app/pelotonia_scraper.py --incremental && app/.venv/bin/python app/pledgeit_scraper.py && app/.venv/bin/python app/org_scraper.py && bash deploy-gcp.sh >> scraper.log 2>&1
 ```
 
+A weekly true-up runs Sundays at 09:00 UTC (5am ET) to reconcile departures and refresh every member's profile:
+```
+0 9 * * 0 cd /home/zabx/source/pelotonia-dashboard && export PATH="$HOME/google-cloud-sdk/bin:$PATH" && app/.venv/bin/python app/pelotonia_scraper.py --trueup && bash deploy-gcp.sh >> scraper.log 2>&1
+```
+
 ### Kubernetes
 - `k8s/pvc.yaml` — PersistentVolumeClaim for SQLite
 - `k8s/deployment.yaml` — Dashboard Deployment + Service
@@ -139,9 +146,11 @@ Scrapers run 3× daily at 7am, 1pm, 7pm ET (11:00, 17:00, 23:00 UTC). Scrape and
 
 ## Organization Leaderboard Scraper
 - **Script**: `app/org_scraper.py` — fetches aggregate stats for ~31 parent Pelotonia organizations
-- **API**: Uses `peloton/{id}` endpoint per org (hardcoded IDs, 0.5s rate limiting, ~15s total)
-- **Storage**: `org_snapshots` table in `pelotonia_data.db` — one row per org per day
-- **Usage**: `python app/org_scraper.py` (scrape) / `--summary` (print leaderboard)
+- **API**: Uses `peloton/{id}` endpoint per org (hardcoded IDs, 0.3s rate limiting)
+- **Participant breakdown**: Also derives riders/challengers/volunteers per org by recursively walking each org's sub-peloton tree (`peloton/{id}/members`, paginated, max depth 4) to collect leaf member publicIds, then reading `participantTypes` from each `user/{id}` profile. This makes a full run much slower than the aggregate-only scrape.
+- **Profile cache**: Results are cached in the `org_member_profiles` table (and reused from the existing `members` table when fresh) with a 14-day staleness window, so most runs only fetch newcomers and stale entries.
+- **Storage**: `org_snapshots` table in `pelotonia_data.db` — one row per org per day (now includes `riders_count`, `challengers_count`, `volunteers_count`)
+- **Usage**: `python app/org_scraper.py` (scrape) / `--summary` (print leaderboard) / `--skip-profiles` (aggregate stats only, no participant walk) / `--refresh-all-profiles` (force re-fetch every cached profile)
 - **Dependencies**: stdlib only
 
 ## Conventions
@@ -151,7 +160,7 @@ Scrapers run 3× daily at 7am, 1pm, 7pm ET (11:00, 17:00, 23:00 UTC). Scrape and
 
 ## Known Issues
 1. **Hidden donor lists** — Some members have raised > 0 but `is_donor_list_visible=0`, so their individual donation records can't be fetched via the API. Their totals are reflected in `members.raised` but not in the `donations` table.
-2. **General peloton funds gap** — The parent team's `raised` includes `general_peloton_funds` not attributed to individual members. Surfaced as a footnote on the Overview goals panel.
+2. **General peloton funds gap** — Some funds (`general_peloton_funds`) are credited to the parent team but not attributed to individual members. The overview `raised` figure is computed as the sum of all sub-team `raised` plus the parent's `general_peloton_funds` (rather than the parent's own `raised`), so sub-team totals and the headline number reconcile. The Fundraising Growth chart still only sums record-by-record donations and runs below this figure (footnoted on the Overview tab).
 3. **Bundle cache not thread-safe** — `_cache` dict in dashboard.py is accessed without locking. Fine for single-threaded Flask dev server, but would need `threading.Lock` under Gunicorn with threads.
 4. **Sub-team snapshots lack participant-type counts** — `daily_snapshots` for sub-teams only record `raised` and `members_count`, not `riders_count`/`challengers_count`/`volunteers_count`. Sub-team report deltas for specific types are approximated.
 5. **Volunteer goals not tracked** — `GOALS_2026_SUBTEAMS` in constants.ts only has rider/challenger/funds goals. Volunteer goal column in TeamsTab always shows 0.

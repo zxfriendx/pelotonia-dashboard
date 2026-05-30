@@ -266,6 +266,13 @@ def init_db(db_path=DB_PATH):
         except Exception:
             pass  # column already exists
 
+    # Migration: add first_scraped to members table
+    try:
+        conn.execute("ALTER TABLE members ADD COLUMN first_scraped TEXT")
+        conn.execute("UPDATE members SET first_scraped = last_scraped WHERE first_scraped IS NULL")
+    except Exception:
+        pass  # column already exists
+
     # Migration: add goal_override to teams table
     try:
         conn.execute("ALTER TABLE teams ADD COLUMN goal_override REAL")
@@ -557,8 +564,8 @@ def scrape_members(conn, team_ids=None):
                 INSERT INTO members
                 (public_id, name, team_id, is_captain, is_admin, is_cancer_survivor,
                  raised, attributed, commitment_amount, fundraising_goal,
-                 profile_image_url, last_scraped)
-                VALUES (?,?,?,?,?,?,?,?,?,?,?,?)
+                 profile_image_url, last_scraped, first_scraped)
+                VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)
                 ON CONFLICT(public_id) DO UPDATE SET
                  name=excluded.name, team_id=excluded.team_id,
                  is_captain=excluded.is_captain, is_admin=excluded.is_admin,
@@ -576,7 +583,7 @@ def scrape_members(conn, team_ids=None):
                 m.get("raised", 0), m.get("attributed", 0),
                 m.get("commitmentAmount", 0), m.get("fundraisingGoal", 0),
                 m.get("profileImageUrl"),
-                now,
+                now, now,
             ))
             total_members += 1
 
@@ -840,7 +847,47 @@ def record_daily_snapshot(conn):
     log.info(f"Recorded daily snapshot for {today}")
 
 
-def scrape_incremental(conn):
+def prune_missing_members(conn, scrape_start_iso):
+    """Soft-prune members not seen during a scrape that began at scrape_start_iso.
+
+    Used by the weekly true-up to reconcile the DB with the live API. Members
+    whose `last_scraped` is older than the scrape start time were not returned
+    by any team roster this run — they've left, been removed, or are otherwise
+    no longer on the team.
+
+    We don't hard-delete because the donations table has a NOT NULL foreign
+    key to members.public_id and we want to preserve donation history. Instead
+    we clear team_id and zero the participation flags so the member drops out
+    of per-team queries and rider/challenger/volunteer counts, while donations
+    still resolve via the JOIN. Their member_routes (current-year ride
+    selections) are removed since they're no longer riding for the team.
+    """
+    rows = conn.execute(
+        "SELECT public_id, name, team_id FROM members "
+        "WHERE last_scraped < ? AND team_id IS NOT NULL",
+        (scrape_start_iso,),
+    ).fetchall()
+    if not rows:
+        log.info("Trueup: no missing members to prune")
+        return 0
+    log.info(f"Trueup: soft-pruning {len(rows)} members not seen this run")
+    for pid, name, tid in rows:
+        log.info(f"  PRUNE: {name} (was on team {tid})")
+    pids = [r[0] for r in rows]
+    placeholders = ",".join("?" * len(pids))
+    conn.execute(
+        f"DELETE FROM member_routes WHERE member_public_id IN ({placeholders})",
+        pids,
+    )
+    conn.execute(
+        f"UPDATE members SET team_id=NULL, is_rider=0, is_challenger=0, "
+        f"is_volunteer=0 WHERE public_id IN ({placeholders})",
+        pids,
+    )
+    return len(rows)
+
+
+def scrape_incremental(conn, trueup=False):
     """Incremental scrape: refresh teams + members, only fetch what changed.
 
     API call budget (scales with member count N):
@@ -853,7 +900,8 @@ def scrape_incremental(conn):
     Total when stable: ~34 calls regardless of team size.
     """
     start = time.time()
-    log.info("Starting incremental scrape...")
+    scrape_start_iso = datetime.now(timezone.utc).isoformat()
+    log.info(f"Starting {'true-up' if trueup else 'incremental'} scrape...")
 
     # 1. Rides & routes (always refresh — 3 calls)
     scrape_rides_and_routes(conn)
@@ -958,11 +1006,21 @@ def scrape_incremental(conn):
     build_donor_identities(conn)
     record_daily_snapshot(conn)
 
+    # 7b. Weekly true-up: prune members not seen this run + refresh every
+    #     surviving profile so participation flags are authoritative.
+    if trueup:
+        pruned = prune_missing_members(conn, scrape_start_iso)
+        all_ids = [r[0] for r in conn.execute("SELECT public_id FROM members")]
+        log.info(f"Trueup: re-fetching profiles for {len(all_ids)} surviving members")
+        scrape_member_profiles(conn, all_ids)
+        record_daily_snapshot(conn)  # rebuild snapshot with pruned counts
+        log.info(f"Trueup: pruned {pruned} members, refreshed {len(all_ids)} profiles")
+
     # 8. Single atomic commit — all changes visible at once to the dashboard
     conn.commit()
 
     elapsed = time.time() - start
-    log.info(f"Incremental scrape complete in {elapsed:.0f}s")
+    log.info(f"{'True-up' if trueup else 'Incremental'} scrape complete in {elapsed:.0f}s")
 
 
 def build_donor_identities(conn):
@@ -1150,6 +1208,9 @@ def main():
     parser.add_argument("--skip-profiles", action="store_true", help="Skip extended profile scraping")
     parser.add_argument("--incremental", action="store_true",
                         help="Incremental scrape: only fetch new data (ideal for daily cron)")
+    parser.add_argument("--trueup", action="store_true",
+                        help="Weekly true-up: incremental scrape + prune members not seen this run "
+                             "+ re-fetch every surviving profile")
     parser.add_argument("--backfill-donations", action="store_true",
                         help="Fetch donations for members with raised > 0 but no donation records")
     args = parser.parse_args()
@@ -1188,8 +1249,8 @@ def main():
         return
 
     # Incremental mode (for daily cron jobs)
-    if args.incremental:
-        scrape_incremental(conn)
+    if args.incremental or args.trueup:
+        scrape_incremental(conn, trueup=args.trueup)
         print_summary(conn)
         conn.close()
         return

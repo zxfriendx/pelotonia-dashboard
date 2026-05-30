@@ -56,6 +56,7 @@ export interface Member {
   profile_image_url: string;
   is_captain: number;
   years_active: number;
+  first_scraped: string | null;
 }
 
 export interface Donation {
@@ -210,6 +211,9 @@ export interface OrgSnapshot {
   raised: number;
   goal: number;
   all_time_raised: number;
+  riders_count: number;
+  challengers_count: number;
+  volunteers_count: number;
   last_scraped: string;
   snapshot_date?: string;
 }

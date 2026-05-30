@@ -91,7 +91,16 @@ If a member disappears from all team rosters:
 - The scraper compares the set of members seen today vs. the set in the DB.
 - Disappeared members are **logged but not deleted**: `GONE: Jane Smith (was on team a0s3t00000...)`
 - Their `last_scraped` date goes stale, making them easy to query (`WHERE last_scraped < today`).
-- We don't delete because disappearances can be temporary (pending re-approval, admin error, etc.).
+- The daily incremental doesn't act on disappearances because they can be temporary (pending re-approval, admin error, etc.).
+
+### Weekly true-up (`--trueup`)
+
+The daily incremental never removes anyone, so departures accumulate. The weekly true-up reconciles the DB with the live API:
+
+- Runs a normal incremental scrape first, capturing `scrape_start_iso`.
+- **Soft-prunes** members whose `last_scraped` is older than the scrape start (i.e. not returned by any roster this run): clears `team_id`, zeros the `is_rider`/`is_challenger`/`is_volunteer` flags, and deletes their `member_routes`. Each is logged as `PRUNE: <name>`.
+- **Does not hard-delete** — `donations.member_public_id` is a NOT NULL foreign key to `members.public_id`, so the row is kept to preserve donation history; donations still resolve via the JOIN while the member drops out of per-team and participant-type queries.
+- Re-fetches **every surviving member's profile** so participation flags are authoritative, then rewrites the daily snapshot with the pruned counts.
 
 ## Pagination
 
@@ -109,7 +118,7 @@ This is important for Consumer Regional Bank which has 224+ members.
 
 ### Core tables
 - **teams** (15 rows) — Team metadata + fundraising. Has `goal_override` column (added via ALTER TABLE) that persists across scraper runs.
-- **members** (~311 rows) — One row per person. Basic data from member list, extended data from profile API.
+- **members** (~311 rows) — One row per person. Basic data from member list, extended data from profile API. `first_scraped` records when the member was first seen (set once on insert; backfilled from `last_scraped` for pre-existing rows).
 - **donations** (~566 rows) — Individual donation records with donor info.
 - **member_routes** (~260 rows) — Which route each member selected.
 - **daily_snapshots** — One row per team per day, tracking fundraising progress over time.
@@ -136,6 +145,9 @@ conn.execute("UPDATE teams SET goal_override = 6000000 WHERE parent_id IS NULL")
 
 # Incremental scrape (recommended for daily use)
 .venv/bin/python pelotonia_scraper.py --incremental
+
+# Weekly true-up (incremental + prune departed members + refresh every profile)
+.venv/bin/python pelotonia_scraper.py --trueup
 ```
 
 ### Systemd automation

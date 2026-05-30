@@ -57,6 +57,7 @@ export function LeaderboardTab() {
     { key: 'rank', label: '#', render: (_r, i) => i + 1 },
     { key: 'name', label: 'Organization', render: (r) => r.name || '—' },
     { key: 'members_count', label: 'Members', align: 'right', render: (r) => (r.members_count || 0).toLocaleString() },
+    { key: 'riders_count', label: 'Riders', align: 'right', render: (r) => (r.riders_count || 0).toLocaleString() },
     { key: 'sub_team_count', label: 'Sub-Teams', align: 'right', render: (r) => (r.sub_team_count || 0).toLocaleString() },
     { key: 'raised', label: 'Raised', align: 'right', render: (r) => money(r.raised || 0) },
     { key: 'goal', label: 'Goal', align: 'right', render: (r) => (r.goal > 0 ? money(r.goal) : '—') },

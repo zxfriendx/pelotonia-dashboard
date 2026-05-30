@@ -49,7 +49,13 @@ def _get_overview(conn):
         "SELECT name, raised, COALESCE(goal_override, goal) as goal, all_time_raised, members_count, general_peloton_funds FROM teams WHERE id=?",
         (PARENT_TEAM_ID,),
     ).fetchone()
-    members = conn.execute("SELECT COUNT(*) as cnt FROM members").fetchone()["cnt"]
+    subteam_raised = conn.execute(
+        "SELECT COALESCE(SUM(raised),0) as s FROM teams WHERE parent_id=?",
+        (PARENT_TEAM_ID,),
+    ).fetchone()["s"]
+    parent_gpf = parent["general_peloton_funds"] if parent else 0
+    raised_total = subteam_raised + parent_gpf
+    members = conn.execute("SELECT COUNT(*) as cnt FROM members WHERE team_id IS NOT NULL").fetchone()["cnt"]
     donations = conn.execute("SELECT COUNT(*) as cnt FROM donations").fetchone()["cnt"]
     total_donated = conn.execute("SELECT COALESCE(SUM(amount),0) as s FROM donations").fetchone()["s"]
     survivors = conn.execute("SELECT COUNT(*) as cnt FROM members WHERE is_cancer_survivor=1").fetchone()["cnt"]
@@ -73,7 +79,7 @@ def _get_overview(conn):
     """).fetchone()
     return {
         "team_name": parent["name"] if parent else "Team Huntington Bank",
-        "raised": parent["raised"] if parent else 0,
+        "raised": raised_total,
         "goal": parent["goal"] if parent else 0,
         "all_time_raised": parent["all_time_raised"] if parent else 0,
         "members_count": members,
@@ -454,7 +460,7 @@ def _get_members(conn):
                t.name as team_name,
                m.is_rider, m.is_challenger, m.is_volunteer,
                m.ride_type, m.committed_amount, m.personal_goal,
-               m.committed_high_roller
+               m.committed_high_roller, m.first_scraped
         FROM members m LEFT JOIN teams t ON m.team_id=t.id
         ORDER BY m.raised DESC
     """).fetchall()
@@ -567,7 +573,8 @@ def _get_subteam_snapshots(conn):
     """Recent daily snapshots for each sub-team (last 8 days for weekly delta)."""
     cutoff = (__import__('datetime').datetime.now() - __import__('datetime').timedelta(days=8)).strftime("%Y-%m-%d")
     rows = conn.execute("""
-        SELECT ds.snapshot_date, t.name, ds.raised, ds.members_count
+        SELECT ds.snapshot_date, ds.team_id, t.name AS team_name,
+               ds.raised, ds.all_time_raised, ds.members_count
         FROM daily_snapshots ds
         JOIN teams t ON ds.team_id=t.id
         WHERE t.parent_id=? AND ds.snapshot_date>=?
@@ -621,7 +628,11 @@ def _get_org_leaderboard(conn):
         return []
     rows = conn.execute("""
         SELECT team_id, name, members_count, sub_team_count, raised, goal,
-               all_time_raised, last_scraped
+               all_time_raised,
+               COALESCE(riders_count, 0) AS riders_count,
+               COALESCE(challengers_count, 0) AS challengers_count,
+               COALESCE(volunteers_count, 0) AS volunteers_count,
+               last_scraped
         FROM org_snapshots
         WHERE snapshot_date = ?
         ORDER BY raised DESC
@@ -634,7 +645,10 @@ def _get_org_snapshots(conn):
     try:
         rows = conn.execute("""
             SELECT snapshot_date, team_id, name, members_count, sub_team_count,
-                   raised, goal, all_time_raised
+                   raised, goal, all_time_raised,
+                   COALESCE(riders_count, 0) AS riders_count,
+                   COALESCE(challengers_count, 0) AS challengers_count,
+                   COALESCE(volunteers_count, 0) AS volunteers_count
             FROM org_snapshots
             ORDER BY snapshot_date, raised DESC
         """).fetchall()

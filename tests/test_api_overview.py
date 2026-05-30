@@ -90,9 +90,9 @@ def test_overview_high_rollers(client):
 
 
 def test_overview_raised_matches_parent(client):
-    """Raised should come from the parent team row."""
+    """Raised should be sub-team totals plus parent general peloton funds."""
     data = json.loads(client.get("/api/overview").data)
-    assert data["raised"] == 15000.0
+    assert data["raised"] == 16000.0
 
 
 def test_overview_signature_riders(client):

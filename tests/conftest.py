@@ -64,6 +64,7 @@ def _create_schema(conn):
             personal_goal REAL DEFAULT 0,
             committed_high_roller INTEGER DEFAULT 0,
             last_scraped TEXT,
+            first_scraped TEXT,
             FOREIGN KEY (team_id) REFERENCES teams(id)
         );
 
@@ -187,6 +188,9 @@ def _create_schema(conn):
             raised REAL DEFAULT 0,
             goal REAL DEFAULT 0,
             all_time_raised REAL DEFAULT 0,
+            riders_count INTEGER DEFAULT 0,
+            challengers_count INTEGER DEFAULT 0,
+            volunteers_count INTEGER DEFAULT 0,
             last_scraped TEXT,
             PRIMARY KEY (snapshot_date, team_id)
         );
@@ -234,27 +238,27 @@ def _seed_data(conn):
         ("m001", "Alice Rider", "sub001", 0, 0, 1, 5000.0, 0, 2000, 5000, None,
          "Alice", "Rider", '["Rider"]', None, 1, 30000.0, '["3 years", "High Roller"]',
          "Pelotonia 2026", 1, 0, 0, "signature", None, 2000.0, 5000.0, 1,
-         "2026-04-01T12:00:00"),
+         "2026-04-01T12:00:00", "2026-03-15T12:00:00"),
         ("m002", "Bob Rider", "sub001", 0, 0, 0, 3000.0, 0, 1500, 3000, None,
          "Bob", "Rider", '["Rider"]', None, 1, 20000.0, '["1 year"]',
          "Pelotonia 2026", 1, 0, 0, "signature", None, 1500.0, 3000.0, 0,
-         "2026-04-01T12:00:00"),
+         "2026-04-01T12:00:00", "2026-03-20T12:00:00"),
         ("m003", "Carol Rider", "sub001", 0, 0, 0, 1000.0, 0, 1000, 2000, None,
          "Carol", "Rider", '["Rider"]', None, 1, 10000.0, '["2 years"]',
          "Pelotonia 2026", 1, 0, 0, "gravel", None, 1000.0, 2000.0, 0,
-         "2026-04-01T12:00:00"),
+         "2026-04-01T12:00:00", "2026-03-25T12:00:00"),
         ("m004", "Dave Challenger", "sub002", 0, 0, 0, 500.0, 0, 500, 1000, None,
          "Dave", "Challenger", '["Challenger"]', None, 1, 5000.0, '["1 year"]',
          "Pelotonia 2026", 0, 0, 1, None, None, 500.0, 1000.0, 0,
-         "2026-04-01T12:00:00"),
+         "2026-04-01T12:00:00", "2026-03-28T12:00:00"),
         ("m005", "Eve Volunteer", "sub002", 0, 0, 0, 0.0, 0, 0, 0, None,
          "Eve", "Volunteer", '["Volunteer"]', None, 1, 0.0, '[]',
          "Pelotonia 2026", 0, 1, 0, None, None, 0.0, 0.0, 0,
-         "2026-04-01T12:00:00"),
+         "2026-04-01T12:00:00", "2026-04-01T12:00:00"),
     ]
     for m in members:
         conn.execute(
-            "INSERT INTO members VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
+            "INSERT INTO members VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
             m,
         )
 
@@ -325,12 +329,12 @@ def _seed_data(conn):
 
     # Org snapshots (2 orgs)
     conn.execute(
-        "INSERT INTO org_snapshots VALUES (?,?,?,?,?,?,?,?,?)",
-        ("2026-04-01", "org001", "Org One", 200, 10, 80000.0, 100000.0, 500000.0, "2026-04-01T10:00:00"),
+        "INSERT INTO org_snapshots VALUES (?,?,?,?,?,?,?,?,?,?,?,?)",
+        ("2026-04-01", "org001", "Org One", 200, 10, 80000.0, 100000.0, 500000.0, 120, 50, 30, "2026-04-01T10:00:00"),
     )
     conn.execute(
-        "INSERT INTO org_snapshots VALUES (?,?,?,?,?,?,?,?,?)",
-        ("2026-04-01", "org002", "Org Two", 150, 8, 60000.0, 80000.0, 400000.0, "2026-04-01T10:00:00"),
+        "INSERT INTO org_snapshots VALUES (?,?,?,?,?,?,?,?,?,?,?,?)",
+        ("2026-04-01", "org002", "Org Two", 150, 8, 60000.0, 80000.0, 400000.0, 90, 40, 20, "2026-04-01T10:00:00"),
     )
 
     conn.commit()

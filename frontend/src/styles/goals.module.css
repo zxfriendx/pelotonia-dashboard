@@ -98,13 +98,6 @@
   z-index: 2;
 }
 
-/* When progress > 80%, flip arrow and label to the left */
-.goalArrowFlipped {
-  flex-direction: row-reverse;
-  transform: translate(-100%, -50%);
-  gap: 8px;
-}
-
 .goalArrowImg {
   display: block;
   width: 48px;

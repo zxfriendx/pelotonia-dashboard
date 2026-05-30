@@ -12,7 +12,7 @@ import tableStyles from '../styles/table.module.css';
 import layoutStyles from '../styles/layout.module.css';
 import kpiStyles from '../styles/kpi.module.css';
 
-type SortCol = 'name' | 'team' | 'type' | 'years' | 'raised' | 'allTime';
+type SortCol = 'name' | 'team' | 'type' | 'years' | 'raised' | 'allTime' | 'signup';
 type SortDir = 'asc' | 'desc';
 
 function parseTags(tagsStr: string): string[] {
@@ -39,7 +39,7 @@ export function MembersTab() {
         setSortDir((d) => (d === 'asc' ? 'desc' : 'asc'));
         return col;
       }
-      setSortDir(col === 'name' || col === 'team' || col === 'type' ? 'asc' : 'desc');
+      setSortDir(col === 'name' || col === 'team' || col === 'type' || col === 'signup' ? 'asc' : 'desc');
       return col;
     });
   }, []);
@@ -55,6 +55,7 @@ export function MembersTab() {
         case 'years': return dir * ((a.years_active || 0) - (b.years_active || 0));
         case 'raised': return dir * ((a.raised || 0) - (b.raised || 0));
         case 'allTime': return dir * ((a.all_time_raised || 0) - (b.all_time_raised || 0));
+        case 'signup': return dir * (a.first_scraped || '').localeCompare(b.first_scraped || '');
         default: return 0;
       }
     });
@@ -218,6 +219,9 @@ export function MembersTab() {
                   <th className={`text-right ${tableStyles.sortable}`} onClick={() => handleSort('allTime')}>
                     All-Time {sortCol === 'allTime' ? (sortDir === 'asc' ? '\u25B2' : '\u25BC') : ''}
                   </th>
+                  <th className={`text-right ${tableStyles.sortable}`} onClick={() => handleSort('signup')}>
+                    Signed Up {sortCol === 'signup' ? (sortDir === 'asc' ? '\u25B2' : '\u25BC') : ''}
+                  </th>
                   <th>Tags</th>
                 </tr>
               </thead>
@@ -249,6 +253,11 @@ export function MembersTab() {
                       <td className="text-right">{m.years_active || '\u2014'}</td>
                       <td className="text-right">{money(m.raised)}</td>
                       <td className="text-right">{money(m.all_time_raised)}</td>
+                      <td className="text-right" style={{ whiteSpace: 'nowrap' }}>
+                        {m.first_scraped
+                          ? new Date(m.first_scraped).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })
+                          : '\u2014'}
+                      </td>
                       <td>
                         {m.is_cancer_survivor ? (
                           <span className={tableStyles.badgeSurvivor}>Survivor</span>
