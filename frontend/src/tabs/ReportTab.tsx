@@ -131,6 +131,7 @@ export function ReportTab() {
     let riders: number, challengers: number, volunteers: number, membersTotal: number;
     let highRollers: number, survivors: number, firstYear: number;
     let raised: number, goal: number, committed: number, hrCommitted: number, stdCommitted: number;
+    let raisedTracked: number, raisedTeamLevel: number;
     let ridersGoal: number, challGoal: number, volGoal: number;
 
     if (filteredTeam) {
@@ -141,7 +142,9 @@ export function ReportTab() {
       highRollers = filteredTeam.high_rollers || 0;
       survivors = filteredTeam.survivors || 0;
       firstYear = filteredTeam.first_year || 0;
-      raised = filteredTeam.total_raised || 0;
+      raised = filteredTeam.official_raised || filteredTeam.total_raised || 0;
+      raisedTracked = filteredTeam.total_raised || 0;
+      raisedTeamLevel = filteredTeam.team_level_raised || 0;
       const sn = shortTeam(subteamFilter);
       const stGoals = GOALS_2026_SUBTEAMS[sn] || {};
       goal = stGoals.funds || 0;
@@ -160,6 +163,8 @@ export function ReportTab() {
       survivors = overview.cancer_survivors || 0;
       firstYear = overview.first_year || 0;
       raised = overview.raised || 0;
+      raisedTracked = overview.raised_tracked || 0;
+      raisedTeamLevel = overview.raised_team_level || 0;
       goal = overview.goal || 6000000;
       committed = overview.total_committed || 0;
       hrCommitted = overview.hr_committed || 0;
@@ -173,6 +178,7 @@ export function ReportTab() {
       raisedDelta, membersDelta, ridersDelta, challDelta, volDelta,
       movers, riders, challengers, volunteers, membersTotal,
       highRollers, survivors, firstYear, raised, goal,
+      raisedTracked, raisedTeamLevel,
       committed, hrCommitted, stdCommitted,
       ridersGoal, challGoal, volGoal,
       teamBreakdown,
@@ -189,6 +195,7 @@ export function ReportTab() {
     raisedDelta, membersDelta, ridersDelta, challDelta, volDelta,
     movers, riders, challengers, volunteers, membersTotal,
     highRollers, survivors, firstYear, raised, goal,
+    raisedTracked, raisedTeamLevel,
     committed, hrCommitted, stdCommitted,
     ridersGoal, challGoal, volGoal,
   } = computed;
@@ -298,6 +305,9 @@ export function ReportTab() {
               goalStr={money(goal)}
               pctVal={fundsPct}
               delta={deltaSpan(raisedDelta, true)}
+              note={raisedTeamLevel > 0
+                ? `${moneyShort(raisedTracked)} from members + ${moneyShort(raisedTeamLevel)} team-level`
+                : undefined}
               chips={[
                 ['Committed', moneyShort(committed)],
                 ['High Rollers', moneyShort(hrCommitted)],
@@ -399,7 +409,8 @@ export function ReportTab() {
                   const sn = shortTeam(t.name);
                   const stGoals = GOALS_2026_SUBTEAMS[sn] || {};
                   const fundGoal = stGoals.funds || 0;
-                  const fundPctVal = fundGoal ? Math.round(((t.total_raised || 0) / fundGoal) * 100) + '%' : '—';
+                  const teamRaised = t.official_raised || t.total_raised || 0;
+                  const fundPctVal = fundGoal ? Math.round((teamRaised / fundGoal) * 100) + '%' : '—';
                   return (
                     <tr key={t.name}>
                       <td style={{ maxWidth: 120 }}>{sn}</td>
@@ -408,7 +419,7 @@ export function ReportTab() {
                       <td style={{ textAlign: 'center' }}>{t.volunteers || 0}</td>
                       <td style={{ textAlign: 'center', color: '#888' }}>{t.first_year || 0}</td>
                       <td style={{ textAlign: 'center', fontWeight: 600 }}>{t.total || 0}</td>
-                      <td style={{ textAlign: 'right', fontWeight: 600, color: BRAND.forest }}>{moneyShort(t.total_raised || 0)}</td>
+                      <td style={{ textAlign: 'right', fontWeight: 600, color: BRAND.forest }}>{moneyShort(teamRaised)}</td>
                       <td style={{ textAlign: 'right', color: '#888' }}>{fundGoal ? moneyShort(fundGoal) : '—'}</td>
                       <td style={{ textAlign: 'right', fontWeight: 600, color: BRAND.forest }}>{moneyShort(t.total_committed || 0)}</td>
                       <td style={{ textAlign: 'center', color: '#888' }}>{fundPctVal}</td>
@@ -430,6 +441,7 @@ function ReportKpiCard({
   goalStr,
   pctVal,
   delta,
+  note,
   chips,
 }: {
   label: string;
@@ -437,6 +449,7 @@ function ReportKpiCard({
   goalStr: string;
   pctVal: number;
   delta: React.ReactNode;
+  note?: string;
   chips: [string, string][];
 }) {
   const barColor = pctVal >= 10 ? BRAND.green : '#6EF056';
@@ -464,6 +477,11 @@ function ReportKpiCard({
         <div style={{ fontSize: 12, color: '#aaa', marginTop: 4 }}>
           of <b style={{ color: '#666' }}>{goalStr}</b> goal {delta}
         </div>
+        {note && (
+          <div style={{ fontSize: 11, color: '#999', marginTop: 3, fontStyle: 'italic' }}>
+            {note}
+          </div>
+        )}
         <div style={{
           marginTop: 14, height: 10, borderRadius: 5, background: '#e8ece9', overflow: 'hidden',
         }}>
