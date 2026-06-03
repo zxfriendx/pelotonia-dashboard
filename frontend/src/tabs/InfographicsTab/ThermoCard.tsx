@@ -15,6 +15,7 @@ interface ThermoCardProps {
   daysLeft: number;
   expected: number;
   deadline?: string;
+  note?: string;
 }
 
 export function ThermoCard({
@@ -26,6 +27,7 @@ export function ThermoCard({
   daysLeft,
   expected,
   deadline,
+  note,
 }: ThermoCardProps) {
   const fillRef = useRef<HTMLDivElement>(null);
   const pctValue = goal > 0 ? (current / goal) * 100 : 0;
@@ -54,6 +56,11 @@ export function ThermoCard({
       <div className={styles.thermoGoal}>
         of <strong>{goal > 0 ? format(goal) : '—'}</strong> goal
       </div>
+      {note && (
+        <div style={{ fontSize: 11, color: '#888', marginTop: 2, fontStyle: 'italic' }}>
+          {note}
+        </div>
+      )}
       <div className={styles.thermoBarWrap}>
         <div className={styles.thermoBarBg}>
           <div ref={fillRef} className={styles.thermoBarFill} style={{ width: 0 }} />

@@ -136,9 +136,23 @@ def gather_data(weekly=False):
 
     # Current overview
     parent = conn.execute(
-        "SELECT name, raised, COALESCE(goal_override, goal) as goal, all_time_raised, members_count "
-        "FROM teams WHERE id=?", (PARENT_TEAM_ID,)
+        "SELECT name, raised, COALESCE(goal_override, goal) as goal, all_time_raised, members_count, "
+        "general_peloton_funds FROM teams WHERE id=?", (PARENT_TEAM_ID,)
     ).fetchone()
+
+    # Funds raised breakdown: official = tracked (attributed to members) + team-level
+    # (top-of-house / private donations credited to the team but not to an individual member).
+    # Official is rebuilt from the reliable sub-team totals — the parent's own `raised` field
+    # is unreliable (it can collapse to just gpf when the API stops aggregating). See CLAUDE.md #2.
+    subteam_raised_sum = conn.execute(
+        "SELECT COALESCE(SUM(raised),0) as s FROM teams WHERE parent_id=?", (PARENT_TEAM_ID,)
+    ).fetchone()["s"]
+    parent_gpf = parent["general_peloton_funds"] if parent else 0
+    official_raised = subteam_raised_sum + parent_gpf
+    tracked_raised = conn.execute(
+        "SELECT COALESCE(SUM(raised),0) as s FROM members WHERE team_id IS NOT NULL"
+    ).fetchone()["s"]
+    team_level_raised = max(official_raised - tracked_raised, 0)
 
     riders = conn.execute("SELECT COUNT(*) as cnt FROM members WHERE is_rider=1").fetchone()["cnt"]
     challengers = conn.execute("SELECT COUNT(*) as cnt FROM members WHERE is_challenger=1").fetchone()["cnt"]
@@ -175,6 +189,7 @@ def gather_data(weekly=False):
                COUNT(DISTINCT m.public_id) as total,
                COALESCE(SUM(m.committed_amount),0) as total_committed,
                COALESCE(SUM(m.raised),0) as total_raised,
+               MAX(t.raised) as official_raised,
                SUM(CASE WHEN m.tags LIKE '%"1 year"%' AND m.is_rider=1 THEN 1 ELSE 0 END) as first_year
         FROM members m
         JOIN teams t ON m.team_id=t.id
@@ -247,8 +262,18 @@ def gather_data(weekly=False):
     else:
         date_str = now.strftime("%A, %B %-d, %Y")
 
+    teams_list = []
+    for r in team_rows:
+        td = dict(r)
+        official = td.get("official_raised") or 0
+        tracked = td.get("total_raised") or 0
+        td["team_level_raised"] = max(official - tracked, 0)
+        teams_list.append(td)
+
     return {
-        "raised": parent["raised"] if parent else 0,
+        "raised": official_raised,
+        "raised_tracked": tracked_raised,
+        "raised_team_level": team_level_raised,
         "goal": parent["goal"] if parent else GOALS["funds"],
         "all_time": parent["all_time_raised"] if parent else 0,
         "riders": riders,
@@ -266,7 +291,7 @@ def gather_data(weekly=False):
         "riders_delta": riders_delta,
         "challengers_delta": challengers_delta,
         "volunteers_delta": volunteers_delta,
-        "teams": [dict(r) for r in team_rows],
+        "teams": teams_list,
         "subteam_deltas": subteam_deltas,
         "campaign_day": campaign_day,
         "days_to_ride": days_to_ride,
@@ -303,6 +328,11 @@ def build_html(data):
             "goal": money(data["goal"]),
             "pct": pct(data["raised"], data["goal"]),
             "delta": delta_str(data["raised_delta"], is_money=True),
+            "note": (
+                f'{money_short(data["raised_tracked"])} from members + '
+                f'{money_short(data["raised_team_level"])} team-level'
+                if data.get("raised_team_level", 0) > 0 else ""
+            ),
             "chips": [
                 ("Committed", money_short(data["committed"])),
                 ("High Rollers", money_short(data["hr_committed"])),
@@ -367,6 +397,7 @@ def build_html(data):
               </table>
               <div style="font-size:36px;font-weight:800;color:#00471F;line-height:1.1;margin-top:8px">{c["current"]}</div>
               <div style="font-size:12px;color:#aaa;margin-top:4px">of <b style="color:#666">{c["goal"]}</b> goal {c["delta"]}</div>
+              {f'<div style="font-size:11px;color:#999;margin-top:3px;font-style:italic">{c["note"]}</div>' if c.get("note") else ''}
               <!-- Progress bar -->
               <div style="margin-top:14px;height:10px;border-radius:5px;background:#e8ece9;overflow:hidden">
                 <div style="height:100%;width:{c["pct"]:.1f}%;border-radius:5px;background:linear-gradient(90deg,#00471F,{bar_color})"></div>
@@ -421,7 +452,8 @@ def build_html(data):
         rider_goal = goals.get("riders", 0)
         fund_goal = goals.get("funds", 0)
         rider_pct = f"{t['riders']/rider_goal*100:.0f}%" if rider_goal else "—"
-        fund_pct = f"{t['total_raised']/fund_goal*100:.0f}%" if fund_goal else "—"
+        team_raised = t.get("official_raised") or t.get("total_raised", 0)
+        fund_pct = f"{team_raised/fund_goal*100:.0f}%" if fund_goal else "—"
         fund_goal_str = money_short(fund_goal) if fund_goal else "—"
         first_yr = t.get("first_year", 0)
 
@@ -433,7 +465,7 @@ def build_html(data):
           <td align="center" style="padding:8px 6px;font-size:12px;color:#333">{t["volunteers"]}</td>
           <td align="center" style="padding:8px 6px;font-size:12px;color:#888">{first_yr}</td>
           <td align="center" style="padding:8px 6px;font-size:12px;color:#333;font-weight:600">{t["total"]}</td>
-          <td align="right" style="padding:8px 6px;font-size:12px;color:#00471F;font-weight:600">{money_short(t["total_raised"])}</td>
+          <td align="right" style="padding:8px 6px;font-size:12px;color:#00471F;font-weight:600">{money_short(team_raised)}</td>
           <td align="right" style="padding:8px 6px;font-size:12px;color:#888">{fund_goal_str}</td>
           <td align="right" style="padding:8px 6px;font-size:12px;color:#00471F;font-weight:600">{money_short(t["total_committed"])}</td>
           <td align="center" style="padding:8px 6px;font-size:11px;color:#888">{fund_pct}</td>
@@ -458,6 +490,9 @@ def build_html(data):
         </tr>
         {team_rows_html}
       </table>
+      <div style="font-size:10px;color:#aaa;margin-top:6px;font-style:italic">
+        Raised reflects the official Pelotonia team total — member-attributed donations plus team-level (top-of-house) gifts not tied to an individual member.
+      </div>
     </div>'''
 
     # Assemble full email
@@ -615,7 +650,12 @@ def _draw_card(draw, x, y, w, h, card_data):
         delta_x = cx + of_w + goal_w + draw.textlength(" goal ", font=f_goal)
         delta_color = C_GREEN if card_data.get("delta_positive", True) else (231, 76, 60)
         draw.text((delta_x, cy), card_data["delta_text"], fill=delta_color, font=_font(12, bold=True))
-    cy += 22
+    cy += 18
+
+    # Breakdown note — reserve the line on every card so the 2x2 grid stays aligned
+    if card_data.get("note"):
+        draw.text((cx, cy), card_data["note"], fill=C_LABEL, font=_font(10))
+    cy += 16
 
     # Progress bar
     bar_w = w - 2 * pad
@@ -669,14 +709,15 @@ def _draw_subteam_table(draw, x, y, w, teams, short_name_fn):
         sn = short_name_fn(t["name"])
         goals = GOALS_SUBTEAMS.get(sn, {})
         fund_goal = goals.get("funds", 0)
-        fund_pct = f"{t['total_raised']/fund_goal*100:.0f}%" if fund_goal else "—"
+        team_raised = t.get("official_raised") or t.get("total_raised", 0)
+        fund_pct = f"{team_raised/fund_goal*100:.0f}%" if fund_goal else "—"
 
         fund_goal_str = money_short(fund_goal) if fund_goal else "—"
         first_yr = str(t.get("first_year", 0))
 
         # Alternating bg
         row_vals = [sn, str(t["riders"]), str(t["challengers"]), str(t["volunteers"]),
-                    first_yr, str(t["total"]), money_short(t["total_raised"]),
+                    first_yr, str(t["total"]), money_short(team_raised),
                     fund_goal_str, money_short(t["total_committed"]), fund_pct]
 
         cx = x + 8
@@ -766,6 +807,11 @@ def build_image(data):
             "goal": money(data["goal"]),
             "pct": pct(data["raised"], data["goal"]),
             "delta_text": dt_raised[0], "delta_positive": dt_raised[1],
+            "note": (
+                f'{money_short(data["raised_tracked"])} from members + '
+                f'{money_short(data["raised_team_level"])} team-level'
+                if data.get("raised_team_level", 0) > 0 else ""
+            ),
             "chips": [("Committed", money_short(data["committed"])),
                       ("High Rollers", money_short(data["hr_committed"])),
                       ("Standard", money_short(data["std_committed"]))],
@@ -805,7 +851,7 @@ def build_image(data):
     # Layout
     IMG_W = 680
     CARD_W = 310
-    CARD_H = 180
+    CARD_H = 196
     GAP = 12
     PAD = 20
 

@@ -49,12 +49,23 @@ def _get_overview(conn):
         "SELECT name, raised, COALESCE(goal_override, goal) as goal, all_time_raised, members_count, general_peloton_funds FROM teams WHERE id=?",
         (PARENT_TEAM_ID,),
     ).fetchone()
+    # Official team total via the robust reconstruction: SUM(sub-team raised) + parent's
+    # general peloton funds. The Pelotonia API's parent-team `raised` field is unreliable
+    # (it has dropped to only the parent's gpf when it stops aggregating sub-teams), so we
+    # rebuild from the reliable sub-team totals instead. See known issue #2.
     subteam_raised = conn.execute(
         "SELECT COALESCE(SUM(raised),0) as s FROM teams WHERE parent_id=?",
         (PARENT_TEAM_ID,),
     ).fetchone()["s"]
     parent_gpf = parent["general_peloton_funds"] if parent else 0
-    raised_total = subteam_raised + parent_gpf
+    official_raised = subteam_raised + parent_gpf
+    # "Tracked" = donations attributed to individual members.
+    tracked_raised = conn.execute(
+        "SELECT COALESCE(SUM(raised),0) as s FROM members WHERE team_id IS NOT NULL",
+    ).fetchone()["s"]
+    # "Team-level" = the official total minus what we can attribute to members
+    # (top-of-house / private donations credited to the team but not to a member).
+    team_level_raised = max(official_raised - tracked_raised, 0)
     members = conn.execute("SELECT COUNT(*) as cnt FROM members WHERE team_id IS NOT NULL").fetchone()["cnt"]
     donations = conn.execute("SELECT COUNT(*) as cnt FROM donations").fetchone()["cnt"]
     total_donated = conn.execute("SELECT COALESCE(SUM(amount),0) as s FROM donations").fetchone()["s"]
@@ -79,7 +90,9 @@ def _get_overview(conn):
     """).fetchone()
     return {
         "team_name": parent["name"] if parent else "Team Huntington Bank",
-        "raised": raised_total,
+        "raised": official_raised,
+        "raised_tracked": tracked_raised,
+        "raised_team_level": team_level_raised,
         "goal": parent["goal"] if parent else 0,
         "all_time_raised": parent["all_time_raised"] if parent else 0,
         "members_count": members,
@@ -217,6 +230,7 @@ def _get_team_breakdown(conn):
                COUNT(DISTINCT m.public_id) as total,
                SUM(m.committed_amount) as total_committed,
                SUM(m.raised) as total_raised,
+               MAX(t.raised) as official_raised,
                SUM(m.all_time_raised) as total_all_time,
                SUM(m.committed_high_roller) as high_rollers,
                SUM(m.is_cancer_survivor) as survivors,
@@ -230,7 +244,14 @@ def _get_team_breakdown(conn):
         GROUP BY t.name
         ORDER BY SUM(m.committed_amount) DESC
     """).fetchall()
-    return [dict(r) for r in rows]
+    result = []
+    for r in rows:
+        d = dict(r)
+        official = d.get("official_raised") or 0
+        tracked = d.get("total_raised") or 0
+        d["team_level_raised"] = max(official - tracked, 0)
+        result.append(d)
+    return result
 
 
 @app.route("/api/team-breakdown")

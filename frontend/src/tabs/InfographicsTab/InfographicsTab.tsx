@@ -27,16 +27,18 @@ export function InfographicsTab() {
   );
 
   const {
-    fundsRaised, fundsGoal, riders, challengers, volunteers, survivors, avgDonation,
+    fundsRaised, fundsTracked, fundsTeamLevel, fundsGoal, riders, challengers, volunteers, survivors, avgDonation,
   } = useMemo(() => {
     if (!bundle) {
-      return { fundsRaised: 0, fundsGoal: 0, riders: 0, challengers: 0, volunteers: 0, survivors: 0, avgDonation: 0 };
+      return { fundsRaised: 0, fundsTracked: 0, fundsTeamLevel: 0, fundsGoal: 0, riders: 0, challengers: 0, volunteers: 0, survivors: 0, avgDonation: 0 };
     }
     const { overview, teamBreakdown, teams, donations } = bundle;
 
     if (selectedTeam === '__all__') {
       return {
         fundsRaised: overview.raised,
+        fundsTracked: overview.raised_tracked || 0,
+        fundsTeamLevel: overview.raised_team_level || 0,
         fundsGoal: overview.goal,
         riders: overview.riders || 0,
         challengers: overview.challengers || 0,
@@ -48,7 +50,7 @@ export function InfographicsTab() {
 
     const team = teamBreakdown.find((t) => t.name === selectedTeam);
     if (!team) {
-      return { fundsRaised: 0, fundsGoal: 0, riders: 0, challengers: 0, volunteers: 0, survivors: 0, avgDonation: 0 };
+      return { fundsRaised: 0, fundsTracked: 0, fundsTeamLevel: 0, fundsGoal: 0, riders: 0, challengers: 0, volunteers: 0, survivors: 0, avgDonation: 0 };
     }
 
     const teamData = teams.find((t) => t.name === selectedTeam);
@@ -56,7 +58,9 @@ export function InfographicsTab() {
     const teamDonTotal = teamDons.reduce((s, d) => s + (d.amount || 0), 0);
 
     return {
-      fundsRaised: team.total_raised,
+      fundsRaised: team.official_raised || team.total_raised,
+      fundsTracked: team.total_raised,
+      fundsTeamLevel: team.team_level_raised || 0,
       fundsGoal: teamData ? teamData.goal : 0,
       riders: team.riders,
       challengers: team.challengers,
@@ -132,6 +136,9 @@ export function InfographicsTab() {
       current: fundsRaised,
       goal: fundsTarget,
       format: moneyShort,
+      note: fundsTeamLevel > 0
+        ? `${moneyShort(fundsTracked)} from members + ${moneyShort(fundsTeamLevel)} team-level`
+        : undefined,
       deadline: 'Fundraising closes Oct 15',
       daysTotal: fundsDaysTotal,
       daysLeft: daysToClose,
@@ -143,6 +150,7 @@ export function InfographicsTab() {
       current: riders,
       goal: tgt.riders,
       format: (v: number) => v.toLocaleString(),
+      note: undefined,
       deadline: '',
       daysTotal: rideDaysTotal,
       daysLeft: daysToRide,
@@ -154,6 +162,7 @@ export function InfographicsTab() {
       current: challengers,
       goal: tgt.challengers,
       format: (v: number) => v.toLocaleString(),
+      note: undefined,
       deadline: '',
       daysTotal: rideDaysTotal,
       daysLeft: daysToRide,
@@ -165,6 +174,7 @@ export function InfographicsTab() {
       current: volunteers,
       goal: tgt.volunteers,
       format: (v: number) => v.toLocaleString(),
+      note: undefined,
       deadline: '',
       daysTotal: rideDaysTotal,
       daysLeft: daysToRide,
@@ -201,6 +211,7 @@ export function InfographicsTab() {
             daysLeft={t.daysLeft}
             expected={t.expected}
             deadline={t.deadline || undefined}
+            note={t.note}
           />
         ))}
       </div>

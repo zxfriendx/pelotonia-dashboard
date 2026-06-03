@@ -6,6 +6,8 @@ import json
 EXPECTED_FIELDS = {
     "team_name",
     "raised",
+    "raised_tracked",
+    "raised_team_level",
     "goal",
     "all_time_raised",
     "members_count",

@@ -1,6 +1,8 @@
 export interface Overview {
   team_name: string;
   raised: number;
+  raised_tracked: number;
+  raised_team_level: number;
   goal: number;
   all_time_raised: number;
   members_count: number;
@@ -79,6 +81,8 @@ export interface TeamBreakdown {
   total: number;
   total_committed: number;
   total_raised: number;
+  official_raised: number;
+  team_level_raised: number;
   total_all_time: number;
   high_rollers: number;
   survivors: number;

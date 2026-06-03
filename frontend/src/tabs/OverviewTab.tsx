@@ -1,6 +1,6 @@
 import { useState, useCallback, useEffect } from 'react';
 import { useDashboardStore } from '../store/useDashboardStore';
-import { money } from '../utils/format';
+import { money, moneyShort } from '../utils/format';
 import { GOALS_2026 } from '../types/constants';
 import { FundraisingGrowthChart } from '../components/charts/FundraisingGrowthChart';
 import { SignupTimelineChart } from '../components/charts/SignupTimelineChart';
@@ -93,7 +93,8 @@ export function OverviewTab() {
     },
   ];
 
-  const gpf = overview.general_peloton_funds || 0;
+  const trackedRaised = overview.raised_tracked || 0;
+  const teamLevelRaised = overview.raised_team_level || 0;
 
   return (
     <div>
@@ -158,7 +159,7 @@ export function OverviewTab() {
             <div className={styles.goalsScaleGoalLabel}>GOAL</div>
           </div>
 
-          {gpf > 0 && (
+          {teamLevelRaised > 0 && (
             <div
               style={{
                 fontSize: '11px',
@@ -169,7 +170,11 @@ export function OverviewTab() {
                 fontStyle: 'italic',
               }}
             >
-              * Includes {money(gpf)} in general peloton funds not attributed to individual members
+              2026 funds raised: {moneyShort(trackedRaised)} from members + {moneyShort(teamLevelRaised)} team-level
+              <span title="Top-of-house / private donations Pelotonia credits to the team but not to an individual member">
+                {' '}&#9432;
+              </span>{' '}
+              = {money(overview.raised || 0)} official
             </div>
           )}
         </div>
