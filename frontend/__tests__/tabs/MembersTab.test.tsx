@@ -22,6 +22,8 @@ vi.mock('../../src/store/useDashboardStore', () => ({
   useDashboardStore: (selector: (state: Record<string, unknown>) => unknown) => {
     const state = {
       bundle: mockBundle,
+      restLoaded: true,
+      restError: null,
       openModal: mockOpenModal,
       memberHighlight: null,
       clearMemberHighlight: mockClearMemberHighlight,

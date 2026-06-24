@@ -5,6 +5,7 @@ import { usePagination } from '../hooks/usePagination';
 import { SearchBar } from '../components/shared/SearchBar';
 import { Pagination } from '../components/shared/Pagination';
 import { ExportButton } from '../components/shared/ExportButton';
+import { TabLoading } from '../components/shared/TabLoading';
 import { moneyFull, shortTeam } from '../utils/format';
 import type { Donation } from '../types';
 import tableStyles from '../styles/table.module.css';
@@ -41,6 +42,8 @@ const searchFn = (d: Donation, q: string) => {
 
 export function DonationsTab() {
   const donations = useDashboardStore((s) => s.bundle?.donations ?? []);
+  const restLoaded = useDashboardStore((s) => s.restLoaded);
+  const restError = useDashboardStore((s) => s.restError);
 
   const sorted = useMemo(
     () => [...donations].sort((a, b) => {
@@ -66,6 +69,8 @@ export function DonationsTab() {
     ]);
     downloadCSV(rows, headers, 'huntington-donations.csv');
   }, [filtered]);
+
+  if (!restLoaded) return <TabLoading label="donations" error={restError} />;
 
   return (
     <div>

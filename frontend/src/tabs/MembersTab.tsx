@@ -7,6 +7,7 @@ import { usePagination } from '../hooks/usePagination';
 import { downloadCSV } from '../utils/csvExport';
 import { SearchBar } from '../components/shared/SearchBar';
 import { Pagination } from '../components/shared/Pagination';
+import { TabLoading } from '../components/shared/TabLoading';
 import type { Member } from '../types';
 import tableStyles from '../styles/table.module.css';
 import layoutStyles from '../styles/layout.module.css';
@@ -25,6 +26,8 @@ function parseTags(tagsStr: string): string[] {
 
 export function MembersTab() {
   const bundle = useDashboardStore((s) => s.bundle);
+  const restLoaded = useDashboardStore((s) => s.restLoaded);
+  const restError = useDashboardStore((s) => s.restError);
   const openModal = useDashboardStore((s) => s.openModal);
   const memberHighlight = useDashboardStore((s) => s.memberHighlight);
   const clearMemberHighlight = useDashboardStore((s) => s.clearMemberHighlight);
@@ -132,6 +135,7 @@ export function MembersTab() {
   }, [filtered]);
 
   if (!bundle) return null;
+  if (!restLoaded) return <TabLoading label="members" error={restError} />;
 
   const { donations } = bundle;
   const uniqueDonors = new Set(donations.map((d) =>

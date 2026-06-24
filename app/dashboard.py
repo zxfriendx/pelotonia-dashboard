@@ -33,9 +33,10 @@ PARENT_TEAM_ID = "a0s3t00000BKX8sAAH"
 
 app = Flask(__name__)
 
-# mtime-based cache — rebuilt only when the DB file is modified (i.e., after scraper runs).
-# `gzip` holds the pre-compressed payload so we never re-compress 8 MB on a cache hit.
-_cache = {"data": None, "gzip": None, "db_mtime": 0}
+# Per-endpoint mtime caches — each entry holds the JSON string + pre-gzipped bytes for
+# a set of bundle keys, rebuilt only when the DB file mtime changes (i.e., after a scrape).
+# Pre-compressing means we never re-gzip a payload on a cache hit.
+_caches = {}  # name -> {"data": str, "gzip": bytes, "db_mtime": float}
 
 
 def _maybe_gzip_json(raw, gz):
@@ -695,49 +696,90 @@ def _get_org_snapshots(conn):
 
 # ── Bundle endpoint (single fetch for the dashboard) ─────────────────────
 
-def _build_bundle():
-    conn = get_db()
-    bundle = {
-        "overview": _get_overview(conn),
-        "teams": _get_teams(conn),
-        "timeline": _get_fundraising_timeline(conn),
-        "fundraisers": _get_top_fundraisers(conn),
-        "donors": _get_top_donors(conn),
-        "members": _get_members(conn),
-        "donations": _get_donations(conn),
-        "teamBreakdown": _get_team_breakdown(conn),
-        "commitTiers": _get_commitment_tiers(conn),
-        "rideTypes": _get_ride_type_breakdown(conn),
-        "routes": _get_routes(conn),
-        "signupTimeline": _get_signup_timeline(conn),
-        "events": _get_events(conn),
-        "companies": _get_company_donations(conn),
-        "ticker": _get_ticker(),
-        "subteamSnapshots": _get_subteam_snapshots(conn),
-        "kidsOverview": _get_kids_overview(conn),
-        "kidsSnapshots": _get_kids_snapshots(conn),
-        "orgLeaderboard": _get_org_leaderboard(conn),
-        "orgSnapshots": _get_org_snapshots(conn),
+def _bundle_builders(conn):
+    """Map each bundle key to a thunk that produces its dataset."""
+    return {
+        "overview": lambda: _get_overview(conn),
+        "teams": lambda: _get_teams(conn),
+        "timeline": lambda: _get_fundraising_timeline(conn),
+        "fundraisers": lambda: _get_top_fundraisers(conn),
+        "donors": lambda: _get_top_donors(conn),
+        "members": lambda: _get_members(conn),
+        "donations": lambda: _get_donations(conn),
+        "teamBreakdown": lambda: _get_team_breakdown(conn),
+        "commitTiers": lambda: _get_commitment_tiers(conn),
+        "rideTypes": lambda: _get_ride_type_breakdown(conn),
+        "routes": lambda: _get_routes(conn),
+        "signupTimeline": lambda: _get_signup_timeline(conn),
+        "events": lambda: _get_events(conn),
+        "companies": lambda: _get_company_donations(conn),
+        "ticker": lambda: _get_ticker(),
+        "subteamSnapshots": lambda: _get_subteam_snapshots(conn),
+        "kidsOverview": lambda: _get_kids_overview(conn),
+        "kidsSnapshots": lambda: _get_kids_snapshots(conn),
+        "orgLeaderboard": lambda: _get_org_leaderboard(conn),
+        "orgSnapshots": lambda: _get_org_snapshots(conn),
     }
+
+
+# Full key order for /api/bundle. REST_KEYS are the heavy datasets deferred to
+# /api/bundle/rest so the first paint only waits on the small "core" payload:
+#   members ~2.3MB, donations ~3.3MB, donors ~1.4MB, companies ~440KB are tab-only;
+#   orgSnapshots ~780KB isn't rendered by the frontend at all.
+ALL_KEYS = [
+    "overview", "teams", "timeline", "fundraisers", "donors", "members",
+    "donations", "teamBreakdown", "commitTiers", "rideTypes", "routes",
+    "signupTimeline", "events", "companies", "ticker", "subteamSnapshots",
+    "kidsOverview", "kidsSnapshots", "orgLeaderboard", "orgSnapshots",
+]
+REST_KEYS = ["members", "donations", "donors", "companies", "orgSnapshots"]
+CORE_KEYS = [k for k in ALL_KEYS if k not in REST_KEYS]
+
+
+def _build_subset(keys):
+    conn = get_db()
+    builders = _bundle_builders(conn)
+    out = {k: builders[k]() for k in keys}
     conn.close()
-    return bundle
+    return out
 
 
-@app.route("/api/bundle")
-def api_bundle():
-    """All dashboard data in one response. Cached until DB file mtime changes."""
+def _cached_bundle_response(name, keys):
+    """Serve a (cached, pre-gzipped) JSON subset of the bundle keyed by `name`."""
     try:
         current_mtime = DB_PATH.stat().st_mtime
     except OSError:
         return jsonify({"error": "database not found"}), 500
 
-    if _cache["data"] is None or _cache["db_mtime"] != current_mtime:
-        raw = json.dumps(_build_bundle())
-        _cache["data"] = raw
-        _cache["gzip"] = gzip.compress(raw.encode(), compresslevel=6)
-        _cache["db_mtime"] = current_mtime
+    c = _caches.get(name)
+    if c is None or c["db_mtime"] != current_mtime:
+        raw = json.dumps(_build_subset(keys))
+        c = {
+            "data": raw,
+            "gzip": gzip.compress(raw.encode(), compresslevel=6),
+            "db_mtime": current_mtime,
+        }
+        _caches[name] = c
 
-    return _maybe_gzip_json(_cache["data"], _cache["gzip"])
+    return _maybe_gzip_json(c["data"], c["gzip"])
+
+
+@app.route("/api/bundle")
+def api_bundle():
+    """All dashboard data in one response (back-compat / ad-hoc queries)."""
+    return _cached_bundle_response("full", ALL_KEYS)
+
+
+@app.route("/api/bundle/core")
+def api_bundle_core():
+    """Small datasets needed for first paint (Overview, KPIs, Teams, Routes, Kids, Leaderboard)."""
+    return _cached_bundle_response("core", CORE_KEYS)
+
+
+@app.route("/api/bundle/rest")
+def api_bundle_rest():
+    """Heavy datasets loaded after first paint (members, donations, donors, companies)."""
+    return _cached_bundle_response("rest", REST_KEYS)
 
 
 # ── Pelotonia Kids API endpoints ───────────────────────────────────────────

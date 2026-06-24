@@ -6,6 +6,7 @@ import { usePagination } from '../hooks/usePagination';
 import { downloadCSV } from '../utils/csvExport';
 import { SearchBar } from '../components/shared/SearchBar';
 import { Pagination } from '../components/shared/Pagination';
+import { TabLoading } from '../components/shared/TabLoading';
 import type { DonorSummary } from '../types';
 import tableStyles from '../styles/table.module.css';
 import layoutStyles from '../styles/layout.module.css';
@@ -24,6 +25,8 @@ function splitAffiliations(raw: string | null): string[] {
 
 export function DonorsTab() {
   const bundle = useDashboardStore((s) => s.bundle);
+  const restLoaded = useDashboardStore((s) => s.restLoaded);
+  const restError = useDashboardStore((s) => s.restError);
   const openModal = useDashboardStore((s) => s.openModal);
 
   const searchFn = useCallback(
@@ -72,6 +75,7 @@ export function DonorsTab() {
   }, [filtered]);
 
   if (!bundle) return null;
+  if (!restLoaded) return <TabLoading label="donors" error={restError} />;
 
   return (
     <div className={layoutStyles.grid} style={{ gridTemplateColumns: '1fr' }}>
