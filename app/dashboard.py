@@ -18,13 +18,14 @@ Database: pelotonia_data.db (created by pelotonia_scraper.py)
 """
 
 import argparse
+import gzip
 import json
 import os
 import sqlite3
 import urllib.request
 from pathlib import Path
 
-from flask import Flask, jsonify, Response, send_from_directory
+from flask import Flask, jsonify, Response, request, send_from_directory
 
 SCRIPT_DIR = Path(__file__).resolve().parent
 DB_PATH = Path(os.environ.get("PELOTONIA_DB", SCRIPT_DIR / "pelotonia_data.db"))
@@ -32,8 +33,22 @@ PARENT_TEAM_ID = "a0s3t00000BKX8sAAH"
 
 app = Flask(__name__)
 
-# mtime-based cache — rebuilt only when the DB file is modified (i.e., after scraper runs)
-_cache = {"data": None, "db_mtime": 0}
+# mtime-based cache — rebuilt only when the DB file is modified (i.e., after scraper runs).
+# `gzip` holds the pre-compressed payload so we never re-compress 8 MB on a cache hit.
+_cache = {"data": None, "gzip": None, "db_mtime": 0}
+
+
+def _maybe_gzip_json(raw, gz):
+    """Return a JSON Response, gzip-encoded when the client advertises support.
+
+    `raw` is the JSON string; `gz` is its pre-compressed bytes. Avoids paying the
+    compression cost per-request by reusing the cached gzip payload."""
+    if "gzip" in request.headers.get("Accept-Encoding", ""):
+        resp = Response(gz, mimetype="application/json")
+        resp.headers["Content-Encoding"] = "gzip"
+        resp.headers["Vary"] = "Accept-Encoding"
+        return resp
+    return Response(raw, mimetype="application/json")
 
 
 def get_db():
@@ -716,14 +731,13 @@ def api_bundle():
     except OSError:
         return jsonify({"error": "database not found"}), 500
 
-    if _cache["data"] is not None and _cache["db_mtime"] == current_mtime:
-        return Response(_cache["data"], mimetype="application/json")
+    if _cache["data"] is None or _cache["db_mtime"] != current_mtime:
+        raw = json.dumps(_build_bundle())
+        _cache["data"] = raw
+        _cache["gzip"] = gzip.compress(raw.encode(), compresslevel=6)
+        _cache["db_mtime"] = current_mtime
 
-    bundle = _build_bundle()
-    raw = json.dumps(bundle)
-    _cache["data"] = raw
-    _cache["db_mtime"] = current_mtime
-    return Response(raw, mimetype="application/json")
+    return _maybe_gzip_json(_cache["data"], _cache["gzip"])
 
 
 # ── Pelotonia Kids API endpoints ───────────────────────────────────────────
@@ -773,8 +787,36 @@ def serve_frontend(path=""):
     """Serve React SPA — try static file first, fall back to index.html."""
     file_path = FRONTEND_DIR / path
     if path and file_path.is_file():
-        return send_from_directory(str(FRONTEND_DIR), path)
-    return send_from_directory(str(FRONTEND_DIR), "index.html")
+        resp = send_from_directory(str(FRONTEND_DIR), path)
+        # Vite content-hashes /assets/* filenames, so they're safe to cache forever.
+        # index.html (and any non-hashed file) stays revalidated so new builds appear.
+        if path.startswith("assets/"):
+            resp.headers["Cache-Control"] = "public, max-age=31536000, immutable"
+        return resp
+    resp = send_from_directory(str(FRONTEND_DIR), "index.html")
+    resp.headers["Cache-Control"] = "no-cache"
+    return resp
+
+
+@app.after_request
+def compress_text_assets(resp):
+    """Gzip JS/CSS/SVG responses when the client supports it.
+
+    The /api/bundle endpoint compresses itself from a cached payload, so it's
+    already encoded and skipped here (Content-Encoding guard)."""
+    accepts_gzip = "gzip" in request.headers.get("Accept-Encoding", "")
+    ctype = resp.headers.get("Content-Type", "")
+    compressible = any(t in ctype for t in ("javascript", "text/css", "image/svg"))
+    if (accepts_gzip and resp.status_code == 200 and compressible
+            and "Content-Encoding" not in resp.headers
+            and resp.content_length and resp.content_length > 1024):
+        # send_file() responses stream in direct-passthrough mode; disable it so
+        # the body can be read into memory and replaced with the gzip payload.
+        resp.direct_passthrough = False
+        resp.set_data(gzip.compress(resp.get_data(), compresslevel=6))
+        resp.headers["Content-Encoding"] = "gzip"
+        resp.headers["Vary"] = "Accept-Encoding"
+    return resp
 
 
 
