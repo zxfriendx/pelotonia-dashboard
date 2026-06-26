@@ -670,8 +670,15 @@ def scrape_member_routes(conn, public_ids=None):
         cursor = conn.execute("SELECT public_id FROM members")
         public_ids = [row[0] for row in cursor]
 
+    # Only the current event's routes live in the `routes` table. A member may
+    # still have a prior-year route selected (e.g. a 2025 Signature Ride route);
+    # inserting that would violate the route_id FK and abort the whole scrape, so
+    # skip routes we don't know about. They aren't part of current-year analytics.
+    valid_route_ids = {row[0] for row in conn.execute("SELECT id FROM routes")}
+
     log.info(f"Fetching route selections for {len(public_ids)} members...")
     total_routes = 0
+    skipped_routes = 0
     members_with_routes = set()
     for i, pid in enumerate(public_ids):
         time.sleep(REQUEST_DELAY)
@@ -683,6 +690,14 @@ def scrape_member_routes(conn, public_ids=None):
         for r in routes:
             route_id = r.get("id")
             if not route_id:
+                continue
+            if route_id not in valid_route_ids:
+                ride = r.get("ride") or {}
+                log.warning(
+                    f"Skipping route {route_id} ({r.get('name')}) for {pid} — "
+                    f"not in current routes (ride: {ride.get('name', '?')})"
+                )
+                skipped_routes += 1
                 continue
             ride = r.get("ride", {})
             conn.execute("""
@@ -732,7 +747,8 @@ def scrape_member_routes(conn, public_ids=None):
     if inferred:
         log.info(f"Inferred participant type from routes for {inferred} members")
 
-    log.info(f"Member routes complete — {total_routes} route selections stored")
+    suffix = f" ({skipped_routes} prior-year routes skipped)" if skipped_routes else ""
+    log.info(f"Member routes complete — {total_routes} route selections stored{suffix}")
 
 
 def scrape_donations(conn, public_ids=None):
