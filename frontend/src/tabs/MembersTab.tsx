@@ -13,7 +13,7 @@ import tableStyles from '../styles/table.module.css';
 import layoutStyles from '../styles/layout.module.css';
 import kpiStyles from '../styles/kpi.module.css';
 
-type SortCol = 'name' | 'team' | 'type' | 'years' | 'raised' | 'allTime' | 'signup';
+type SortCol = 'riderId' | 'name' | 'team' | 'type' | 'years' | 'raised' | 'allTime' | 'signup';
 type SortDir = 'asc' | 'desc';
 
 function parseTags(tagsStr: string): string[] {
@@ -42,7 +42,7 @@ export function MembersTab() {
         setSortDir((d) => (d === 'asc' ? 'desc' : 'asc'));
         return col;
       }
-      setSortDir(col === 'name' || col === 'team' || col === 'type' || col === 'signup' ? 'asc' : 'desc');
+      setSortDir(col === 'riderId' || col === 'name' || col === 'team' || col === 'type' || col === 'signup' ? 'asc' : 'desc');
       return col;
     });
   }, []);
@@ -52,6 +52,7 @@ export function MembersTab() {
     const dir = sortDir === 'asc' ? 1 : -1;
     return [...bundle.members].sort((a, b) => {
       switch (sortCol) {
+        case 'riderId': return dir * (a.public_id || '').localeCompare(b.public_id || '');
         case 'name': return dir * a.name.localeCompare(b.name);
         case 'team': return dir * (shortTeam(a.team_name) || '').localeCompare(shortTeam(b.team_name) || '');
         case 'type': return dir * memberType(a).localeCompare(memberType(b));
@@ -67,11 +68,11 @@ export function MembersTab() {
   const searchFn = useCallback(
     (m: Member, q: string) =>
       m.name.toLowerCase().includes(q) ||
+      (m.public_id || '').toLowerCase().includes(q) ||
       (m.team_name || '').toLowerCase().includes(q) ||
       (m.tags || '').toLowerCase().includes(q) ||
       (m.ride_type || '').toLowerCase().includes(q) ||
-      (memberType(m) === 'Rider' && 'rider'.includes(q)) ||
-      (memberType(m) === 'Challenger' && 'challenger'.includes(q)),
+      memberType(m).toLowerCase().includes(q),
     [],
   );
 
@@ -110,6 +111,7 @@ export function MembersTab() {
   const handleExport = useCallback(() => {
     if (!filtered.length) return;
     const headers = [
+      'Rider ID',
       'Name',
       'Sub-Team',
       'Type',
@@ -121,6 +123,7 @@ export function MembersTab() {
       'Captain',
     ];
     const rows = filtered.map((m) => [
+      m.public_id,
       m.name,
       shortTeam(m.team_name),
       memberType(m),
@@ -196,7 +199,7 @@ export function MembersTab() {
           <SearchBar
             value={query}
             onChange={setQuery}
-            placeholder="Search by name, team, type, tags..."
+            placeholder="Search by name, rider ID, team, type, tags..."
           />
 
           <div style={{ overflowX: 'auto' }}>
@@ -204,6 +207,9 @@ export function MembersTab() {
               <thead>
                 <tr>
                   <th>#</th>
+                  <th className={tableStyles.sortable} onClick={() => handleSort('riderId')}>
+                    Rider ID {sortCol === 'riderId' ? (sortDir === 'asc' ? '▲' : '▼') : ''}
+                  </th>
                   <th className={tableStyles.sortable} onClick={() => handleSort('name')}>
                     Name {sortCol === 'name' ? (sortDir === 'asc' ? '\u25B2' : '\u25BC') : ''}
                   </th>
@@ -247,6 +253,9 @@ export function MembersTab() {
                       title="Click to see donations"
                     >
                       <td>{idx}</td>
+                      <td style={{ whiteSpace: 'nowrap', fontVariantNumeric: 'tabular-nums' }}>
+                        {m.public_id}
+                      </td>
                       <td>
                         {m.is_captain ? '\u2B50 ' : ''}
                         {m.name}

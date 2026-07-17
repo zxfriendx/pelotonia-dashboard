@@ -62,7 +62,7 @@ Data is sourced from the Pelotonia API, PledgeIt campaign page, and organization
 - **Overview**: Pelotonia-branded goals panel (editable targets via localStorage, campaign arrow asset, friendly timestamp; funds goal renders as `$XK`), Fundraising Growth dual-axis chart (cumulative line + daily bars) with a footnote that the cumulative total reflects only record-by-record donations and runs below the official raised figure, Participant Signups Over Time (Riders/Challengers/Volunteers lines), Participant Types by Sub-Team chart, Raised by Sub-Team chart
 - **Teams**: 2026 Goals & Progress table (all sub-teams), Participant Types by Sub-Team chart, Raised by Sub-Team chart
 - **Routes & Events**: Signature Ride & Gravel Day signup totals + vertical bar chart (Raised vs Committed) + route tables with member drill-down modals
-- **Members**: KPI cards (member count, unique donors, avg donors/member), searchable/sortable member table with donation modals, column header click-to-sort (Name, Sub-Team, Type, Years, Raised, All-Time, Signed Up), "Signed Up" column from `first_scraped`, cross-tab navigation from other tabs
+- **Members**: KPI cards (member count, unique donors, avg donors/member), searchable/sortable member table with donation modals, column header click-to-sort (Rider ID, Name, Sub-Team, Type, Years, Raised, All-Time, Signed Up), "Rider ID" column from `public_id` (the Pelotonia rider ID, e.g. `PF0041`/`TW766516` — searchable and CSV-exported), "Signed Up" column from `first_scraped`, cross-tab navigation from other tabs
 - **Donors**: Top donors table with recipient breakdown modals
 - **Companies**: Corporate donor analytics with drill-down modal (matches by recognition_name)
 - **Donations**: Donation feed table with search
