@@ -177,6 +177,26 @@ def api_get(path, retries=3, page_size=None):
     return aggregate[:total] if total else aggregate
 
 
+def reconstruct_raised(team_id, fr):
+    """Robust official raised = SUM(direct child raised) + generalPelotonFunds.
+
+    Mirrors dashboard.py `_get_overview`. The API's parent `fundraising.raised`
+    field is unreliable (it can collapse to just generalPelotonFunds when it
+    stops aggregating sub-pelotons), so we reconstruct from the direct children.
+    The child list from `peloton/{id}/members` reports each direct sub-peloton's
+    (or individual member's) `raised`, which already rolls up its descendants.
+    Falls back to the raw parent `raised` if the child list is unavailable.
+    """
+    raw = fr.get("raised") or 0
+    gpf = fr.get("generalPelotonFunds") or 0
+    time.sleep(RATE_LIMIT)
+    children = api_get(f"peloton/{team_id}/members", page_size=PAGE_SIZE)
+    if not isinstance(children, list) or not children:
+        return raw
+    child_sum = sum(c.get("raised") or 0 for c in children)
+    return child_sum + gpf
+
+
 def fetch_org(team_id):
     """Fetch a single org's aggregate stats from peloton/{id}."""
     data = api_get(f"peloton/{team_id}")
@@ -185,7 +205,7 @@ def fetch_org(team_id):
         "name": data.get("name", "Unknown"),
         "members_count": int(data.get("membersCount") or 0),
         "sub_team_count": int(data.get("numberOfSubPelotons") or 0),
-        "raised": fr.get("raised") or 0,
+        "raised": reconstruct_raised(team_id, fr),
         "goal": fr.get("goal") or 0,
         "all_time_raised": fr.get("allTimeRaised") or 0,
     }
