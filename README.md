@@ -26,6 +26,19 @@ pelotonia-dashboard/
 
 ---
 
+## Branches & History
+
+**`master` is the mainline** — it is what runs in production (GCP Cloud Run deploys from this checkout 3×/day) and contains the full feature history from the initial commit (2026-03-18) through the present.
+
+Two historical notes for anyone tracing the commit graph:
+
+- **The mainline was previously (mis)named `alloydb-migration`.** An AlloyDB/PostgreSQL migration was started in April 2026 on a branch of that name, but the plan was abandoned; day-to-day feature work continued on the branch anyway, so its name stopped matching its content. In July 2026 the branch was renamed to `master` (same commits, same tree — nothing was rebased). The actual migration attempt — a full SQLite → PostgreSQL conversion, never deployed — is parked at **`archive/alloydb-postgres-wip`** (single commit `7eb778e`, branched from `019133e`).
+- **`archive/superseded-may-fixes`** preserves a short-lived parallel line of 5 commits from May 2026 (`19665d1`..`0629b7b`) made directly on the old local `master` while `alloydb-migration` was the active branch. All of its changes (overview raised reconstruction, campaign-day formula alignment, `team_name` snapshot column fix, daily-report snapshot skip, profile rescan → superseded by `--trueup`) were re-implemented or absorbed on the mainline in `6e781d1`. It is kept only for provenance; do not build on it.
+
+`archive/*` branches are frozen — new work belongs on `master`.
+
+---
+
 ## Dashboard
 
 A single-page Flask application with 11 tabs providing fundraising analytics.
