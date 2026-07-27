@@ -1029,8 +1029,18 @@ def scrape_incremental(conn, trueup=False):
         all_ids = [r[0] for r in conn.execute("SELECT public_id FROM members")]
         log.info(f"Trueup: re-fetching profiles for {len(all_ids)} surviving members")
         scrape_member_profiles(conn, all_ids)
+        # Routes are otherwise only re-fetched when a member's profile goes
+        # stale, but the daily roster refresh keeps last_scraped current, so a
+        # changed route selection can sit stale indefinitely (observed: a rider
+        # who switched Saturday 100mi -> 46mi in a February-dated row). Rebuild
+        # every on-team member's routes weekly so selections stay authoritative.
+        on_team = [r[0] for r in conn.execute(
+            "SELECT public_id FROM members WHERE team_id IS NOT NULL")]
+        log.info(f"Trueup: clearing and re-fetching routes for {len(on_team)} on-team members")
+        conn.execute("DELETE FROM member_routes")
+        scrape_member_routes(conn, on_team)
         record_daily_snapshot(conn)  # rebuild snapshot with pruned counts
-        log.info(f"Trueup: pruned {pruned} members, refreshed {len(all_ids)} profiles")
+        log.info(f"Trueup: pruned {pruned} members, refreshed {len(all_ids)} profiles + routes")
 
     # 8. Single atomic commit — all changes visible at once to the dashboard
     conn.commit()

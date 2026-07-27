@@ -142,7 +142,7 @@ Public, unauthenticated. Header-based pagination (`Pagination-Page`, `Pagination
 # Incremental scrape (~19 seconds, ~34 API calls) — used by daily cron
 .venv/bin/python pelotonia_scraper.py --incremental
 
-# Weekly true-up — incremental + prune departed members + refresh every profile
+# Weekly true-up — incremental + prune departed members + refresh every profile and route
 .venv/bin/python pelotonia_scraper.py --trueup
 
 # Backfill donations for members with raised > 0 but no records
@@ -265,7 +265,7 @@ Scheduled work runs via **cron** (`crontab -l`). The only long-running systemd u
 | Scrape + deploy | 11:00, 17:00, 23:00 daily | Main (incremental) + Kids + Org scrapers, then GCP redeploy |
 | Daily report | 11:30 daily | Daily email report (30 min after morning scrape) |
 | Weekly report | 11:35 Thursdays | Weekly email report (7-day deltas) |
-| Weekly true-up | 09:00 Sundays | `pelotonia_scraper.py --trueup` (prune departed members + refresh every profile), then deploy |
+| Weekly true-up | 09:00 Sundays | `pelotonia_scraper.py --trueup` (prune departed members + refresh every profile and route), then deploy |
 | `pelotonia-dashboard.service` (systemd) | always running | Flask dashboard on port 5050 (auto-restarts, starts on boot via linger) |
 
 ```bash

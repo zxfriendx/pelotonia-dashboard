@@ -100,7 +100,9 @@ The daily incremental never removes anyone, so departures accumulate. The weekly
 - Runs a normal incremental scrape first, capturing `scrape_start_iso`.
 - **Soft-prunes** members whose `last_scraped` is older than the scrape start (i.e. not returned by any roster this run): clears `team_id`, zeros the `is_rider`/`is_challenger`/`is_volunteer` flags, and deletes their `member_routes`. Each is logged as `PRUNE: <name>`.
 - **Does not hard-delete** — `donations.member_public_id` is a NOT NULL foreign key to `members.public_id`, so the row is kept to preserve donation history; donations still resolve via the JOIN while the member drops out of per-team and participant-type queries.
-- Re-fetches **every surviving member's profile** so participation flags are authoritative, then rewrites the daily snapshot with the pruned counts.
+- Re-fetches **every surviving member's profile** so participation flags are authoritative.
+- Clears `member_routes` entirely and re-fetches **every on-team member's routes**. This is the only path that reliably catches route *changes*: the incremental only re-fetches routes when a member's profile goes stale, but the daily roster refresh keeps `last_scraped` current, so a rider who switches routes (e.g. Saturday 100mi → 46mi) would otherwise keep the old selection indefinitely.
+- Rewrites the daily snapshot with the pruned counts.
 
 ## Pagination
 
@@ -146,13 +148,13 @@ conn.execute("UPDATE teams SET goal_override = 6000000 WHERE parent_id IS NULL")
 # Incremental scrape (recommended for daily use)
 .venv/bin/python pelotonia_scraper.py --incremental
 
-# Weekly true-up (incremental + prune departed members + refresh every profile)
+# Weekly true-up (incremental + prune departed members + refresh every profile and route)
 .venv/bin/python pelotonia_scraper.py --trueup
 ```
 
 ### Cron automation
 Scheduling is via cron (an earlier systemd-timer chain was retired 2026-05-30 to avoid double-runs). The scrape and GCP deploy are chained so the deploy waits for the scraper's atomic commit:
 - **3×/day** at 11:00 / 17:00 / 23:00 UTC (7am / 1pm / 7pm ET): `--incremental` + Kids + Org scrapers, then `deploy-gcp.sh`
-- **Weekly true-up** Sundays 09:00 UTC: `--trueup`, then `deploy-gcp.sh`
+- **Weekly true-up** Sundays 09:00 UTC: `--trueup` (prune + full profile and route refresh), then `deploy-gcp.sh`
 - View: `crontab -l`
 - Logs: `tail -f scraper.log`
