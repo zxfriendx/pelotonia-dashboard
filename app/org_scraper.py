@@ -2,7 +2,7 @@
 """
 Organization Leaderboard Scraper — Pelotonia Top Teams
 
-Fetches aggregate stats for ~31 major Pelotonia organizations (parent teams)
+Fetches aggregate stats for ~55 major Pelotonia organizations (parent teams)
 and stores daily snapshots for leaderboard comparison.
 
 Per org: name, members_count, sub_team_count, raised, goal, all_time_raised,
@@ -78,6 +78,33 @@ ORGS = {
     "a0sQj00000DSgWHIA1": "Park National Bank",
     "a0sQj00000Am2plIAB": "Northwest Bank",
     "a0sQj00000DUFOjIAP": "Fahey Bank",
+    # Added 2026-07-28 from a full sweep of pelotonia.org/peloton-list/
+    # (every parent/standalone peloton raising >= ~$44K, the floor of the
+    # existing active entries). Chipotle had been missed entirely.
+    "a0s3t00000BKXVsAAP": "Team Chipotle",
+    "a0sQj000002ZfNKIA0": "Simply Community Family",
+    "a0s3t00000BKXM9AAP": "Team Bexley",
+    "a0s3t00000BKXNfAAP": "teamCOPC",
+    "a0s3t00000DphIDAAZ": "RTRX",
+    "a0s3t00000BKXO5AAP": "Girls with Gears",
+    "a0s3t00000BKXW3AAP": "The Encova Peloton",
+    "a0s3t00000BKXPcAAP": "DHL Supply Chain",
+    "a0s3t00000BKXSVAA5": "Team Lane Bryant",
+    "a0s3t00000AkM7TAAV": "RiverWest - Team Jack",
+    "a0s3t00000EKqIlAAL": "Elford",
+    "a0s3t00000BKXX9AAP": "Powered by Pepperoni",
+    "a0s3t00000BKXWrAAP": "Team Cleary Cyclers",
+    "a0s3t00000BKXSpAAP": "CoverMyMeds",
+    "a0s3t00000BKXRmAAP": "Team Grandview",
+    "a0s3t00000BKXVoAAP": "BWE Peloton",
+    "a0s3t00000BKXQ5AAP": "Team IGS Energy",
+    "a0s3t00000AnReCAAV": "The Debbies",
+    "a0s3t00000BKXS3AAP": "Advanced Drainage Systems, Inc.",
+    "a0s3t00000AkLhVAAV": "Designer Brands/DSW Peloton",
+    "a0s3t00000BKXQ0AAP": "KPMG",
+    "a0s3t00000BKXW4AAP": "Team CFC",
+    "a0s3t00000BKXU4AAP": "Germain",
+    "a0s3t00000BKXQ7AAP": "Team Granville Spokesmen",
 }
 
 # ---------------------------------------------------------------------------

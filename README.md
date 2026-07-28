@@ -9,7 +9,7 @@ pelotonia-dashboard/
 ├── app/                            # Application code
 │   ├── pelotonia_scraper.py            # Main data scraper (Pelotonia API → SQLite)
 │   ├── pledgeit_scraper.py             # Pelotonia Kids stats scraper (PledgeIt → SQLite)
-│   ├── org_scraper.py                  # Organization leaderboard scraper (~31 parent orgs)
+│   ├── org_scraper.py                  # Organization leaderboard scraper (~55 parent orgs)
 │   ├── dashboard.py                    # Flask dashboard (port 5050, 11 tabs)
 │   ├── daily_report.py                 # Daily/weekly email report with HTML + PNG infographic
 │   ├── pelotonia_data.db               # SQLite database (not in git)
@@ -169,7 +169,7 @@ python app/pledgeit_scraper.py --summary   # Print latest snapshot
 
 ### Organization Leaderboard Scraper
 
-Fetches aggregate stats for ~31 parent Pelotonia organizations via the `peloton/{id}` endpoint, plus a per-org rider/challenger/volunteer breakdown derived by walking each org's sub-peloton tree and reading `participantTypes` from member profiles. Profiles are cached (`org_member_profiles`, 14-day staleness window), so most runs only fetch newcomers.
+Fetches aggregate stats for ~55 parent Pelotonia organizations via the `peloton/{id}` endpoint, plus a per-org rider/challenger/volunteer breakdown derived by walking each org's sub-peloton tree and reading `participantTypes` from member profiles. Profiles are cached (`org_member_profiles`, 14-day staleness window), so most runs only fetch newcomers.
 
 ```bash
 python app/org_scraper.py                       # Scrape all orgs (incl. participant breakdown)
@@ -198,7 +198,7 @@ SQLite at `app/pelotonia_data.db` (default). Override with `PELOTONIA_DB` env va
 | `daily_snapshots` | One row per team per day — raised, goal, members, signature/gravel riders |
 | `events` | Historical event metadata (2012-2026) |
 | `kids_snapshots` | Pelotonia Kids aggregate stats per day (from PledgeIt) |
-| `org_snapshots` | Organization leaderboard stats per day (~31 orgs), incl. rider/challenger/volunteer counts |
+| `org_snapshots` | Organization leaderboard stats per day (~55 orgs), incl. rider/challenger/volunteer counts |
 | `org_member_profiles` | Cached participant-type flags per org member (feeds the leaderboard breakdown) |
 
 ### Entity Relationship

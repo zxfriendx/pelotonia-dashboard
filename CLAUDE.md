@@ -8,7 +8,7 @@ Data is sourced from the Pelotonia API, PledgeIt campaign page, and organization
 - `app/` — Application code:
   - `pelotonia_scraper.py` — Scrapes Pelotonia API for team/member/donation/route data into SQLite
   - `pledgeit_scraper.py` — Scrapes aggregate Pelotonia Kids stats from PledgeIt campaign page
-  - `org_scraper.py` — Scrapes aggregate stats for ~31 top Pelotonia parent organizations from the API
+  - `org_scraper.py` — Scrapes aggregate stats for ~55 top Pelotonia parent organizations from the API
   - `pelotonia_data.db` — SQLite database (teams, members, donations, member_routes, daily_snapshots, events, routes, rides, donor_identities, kids_snapshots, org_snapshots, org_member_profiles)
   - `dashboard.py` — Flask dashboard (port 5050) with fundraising, routes, members, donor analytics, kids tracking
   - `daily_report.py` — Daily/weekly email report with HTML + PNG infographic attachment, sent via SMTP
@@ -145,7 +145,7 @@ A weekly true-up runs Sundays at 09:00 UTC (5am ET) to reconcile departures and 
 - **Dependencies**: stdlib only (urllib, json, re, sqlite3)
 
 ## Organization Leaderboard Scraper
-- **Script**: `app/org_scraper.py` — fetches aggregate stats for ~31 parent Pelotonia organizations
+- **Script**: `app/org_scraper.py` — fetches aggregate stats for ~55 parent Pelotonia organizations
 - **API**: Uses `peloton/{id}` endpoint per org (hardcoded IDs, 0.3s rate limiting)
 - **Raised reconstruction**: Each org's stored `raised` is the *robust reconstruction* `SUM(direct child raised) + generalPelotonFunds` (via `reconstruct_raised()`, one extra `peloton/{id}/members` fetch per org), **not** the API's raw `fundraising.raised` field — same methodology `dashboard.py:_get_overview` uses for the top-bar total, so the Leaderboard and the top bar agree. Falls back to the raw field if the child list is unavailable. See Known Issue #2.
 - **Participant breakdown**: Also derives riders/challengers/volunteers per org by recursively walking each org's sub-peloton tree (`peloton/{id}/members`, paginated, max depth 4) to collect leaf member publicIds, then reading `participantTypes` from each `user/{id}` profile. This makes a full run much slower than the aggregate-only scrape.

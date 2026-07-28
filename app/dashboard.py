@@ -104,11 +104,19 @@ def _get_overview(conn):
                COALESCE(SUM(CASE WHEN committed_high_roller=0 THEN committed_amount ELSE 0 END),0) as std
         FROM members WHERE team_id IS NOT NULL
     """).fetchone()
+    # Pelotonia Kids (Team Huntington's PledgeIt campaign) runs on a separate
+    # platform, so its raised is not part of the official team reconstruction.
+    # Exposed separately; the top-bar KPI adds it to the displayed total.
+    kids_row = conn.execute(
+        "SELECT estimated_amount_raised FROM kids_snapshots ORDER BY snapshot_date DESC LIMIT 1"
+    ).fetchone()
+    kids_raised = kids_row["estimated_amount_raised"] if kids_row else 0
     return {
         "team_name": parent["name"] if parent else "Team Huntington Bank",
         "raised": official_raised,
         "raised_tracked": tracked_raised,
         "raised_team_level": team_level_raised,
+        "kids_raised": kids_raised,
         "goal": parent["goal"] if parent else 0,
         "all_time_raised": parent["all_time_raised"] if parent else 0,
         "members_count": members,

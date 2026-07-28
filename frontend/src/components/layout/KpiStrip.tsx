@@ -6,12 +6,13 @@ import { money, pct } from '../../utils/format';
 interface FlipCardProps {
   frontValue: string;
   frontLabel: string;
+  frontSubText?: string;
   backValue: string;
   backLabel: string;
   shareText?: string;
 }
 
-function FlipCard({ frontValue, frontLabel, backValue, backLabel, shareText }: FlipCardProps) {
+function FlipCard({ frontValue, frontLabel, frontSubText, backValue, backLabel, shareText }: FlipCardProps) {
   const [flipped, setFlipped] = useState(false);
 
   const toggle = useCallback(() => setFlipped((f) => !f), []);
@@ -26,6 +27,7 @@ function FlipCard({ frontValue, frontLabel, backValue, backLabel, shareText }: F
         <div className={styles.kpiFront}>
           <div className={styles.value}>{frontValue}</div>
           <div className={styles.label}>{frontLabel}</div>
+          {frontSubText && <div className={styles.kpiShare}>{frontSubText}</div>}
         </div>
         <div className={styles.kpiBack}>
           <div className={styles.value}>{backValue}</div>
@@ -57,7 +59,10 @@ export function KpiStrip() {
   if (!bundle) return null;
 
   const { overview, ticker } = bundle;
-  const raised = overview.raised;
+  // Top-bar total includes Pelotonia Kids (separate PledgeIt platform, so it's
+  // not part of the official team reconstruction in overview.raised).
+  const kidsRaised = overview.kids_raised ?? 0;
+  const raised = overview.raised + kidsRaised;
   const goal = overview.goal;
   const allTime = overview.all_time_raised;
 
@@ -74,6 +79,7 @@ export function KpiStrip() {
       <FlipCard
         frontValue={money(raised)}
         frontLabel={`Raised (2026)${goal ? ` of ${money(goal)}` : ''}`}
+        frontSubText={kidsRaised > 0 ? `incl. ${money(kidsRaised)} Pelotonia Kids` : undefined}
         backValue={tickerAvailable ? money(pelRaised) : 'N/A'}
         backLabel="All Pelotonia"
         shareText={tickerAvailable ? `${raisedSharePct}% of total` : undefined}

@@ -3,6 +3,7 @@ export interface Overview {
   raised: number;
   raised_tracked: number;
   raised_team_level: number;
+  kids_raised?: number;
   goal: number;
   all_time_raised: number;
   members_count: number;

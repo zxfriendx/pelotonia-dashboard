@@ -8,6 +8,7 @@ EXPECTED_FIELDS = {
     "raised",
     "raised_tracked",
     "raised_team_level",
+    "kids_raised",
     "goal",
     "all_time_raised",
     "members_count",
@@ -95,6 +96,12 @@ def test_overview_raised_matches_parent(client):
     """Raised should be sub-team totals plus parent general peloton funds."""
     data = json.loads(client.get("/api/overview").data)
     assert data["raised"] == 16000.0
+
+
+def test_overview_kids_raised(client):
+    """kids_raised should surface the latest kids_snapshots amount, separate from raised."""
+    data = json.loads(client.get("/api/overview").data)
+    assert data["kids_raised"] == 45000.0
 
 
 def test_overview_signature_riders(client):

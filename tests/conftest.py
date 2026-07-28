@@ -357,9 +357,8 @@ def client(test_db, monkeypatch):
     import app.dashboard as dashboard_module
 
     monkeypatch.setattr(dashboard_module, "DB_PATH", test_db)
-    # Reset the mtime cache so each test starts fresh
-    dashboard_module._cache["data"] = None
-    dashboard_module._cache["db_mtime"] = 0
+    # Reset the mtime caches so each test starts fresh
+    dashboard_module._caches.clear()
 
     dashboard_module.app.config["TESTING"] = True
     with dashboard_module.app.test_client() as c:

@@ -43,8 +43,12 @@ describe('memberType', () => {
     expect(memberType(makeMember({ route_names: '50-Mile Route' }))).toBe('Rider');
   });
 
-  it('returns dash for unknown type', () => {
-    expect(memberType(makeMember())).toBe('\u2014');
+  it('returns Registered for on-team member with no type', () => {
+    expect(memberType(makeMember())).toBe('Registered');
+  });
+
+  it('returns dash for off-team member with no type', () => {
+    expect(memberType(makeMember({ team_name: '' }))).toBe('\u2014');
   });
 
   it('prioritizes rider over challenger', () => {

@@ -71,7 +71,7 @@ describe('MembersTab', () => {
 
   it('search filters members', () => {
     render(<MembersTab />);
-    const searchInput = screen.getByPlaceholderText('Search by name, team, type, tags...');
+    const searchInput = screen.getByPlaceholderText('Search by name, rider ID, team, type, tags...');
     fireEvent.change(searchInput, { target: { value: 'bob' } });
 
     expect(screen.getByText('Bob Smith')).toBeInTheDocument();
