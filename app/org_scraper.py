@@ -494,6 +494,36 @@ def main():
         if i < total:
             time.sleep(RATE_LIMIT)
 
+    # Per-org sanity guard: an org's raised never legitimately halves overnight.
+    # Observed 2026-08-13: peloton/{id}/members returned an empty list for
+    # Team Huntington Bank, so reconstruct_raised fell back to the collapsed raw
+    # parent `raised` (~$117K vs the real ~$4.5M) and membersCount was 0. When a
+    # fresh value drops below half the org's previous snapshot, carry the
+    # previous snapshot's volatile fields forward instead of storing the glitch.
+    for team_id, stats in snapshots.items():
+        prev = conn.execute(
+            """SELECT raised, members_count, sub_team_count,
+                      riders_count, challengers_count, volunteers_count
+               FROM org_snapshots WHERE team_id = ? AND snapshot_date < ?
+               ORDER BY snapshot_date DESC LIMIT 1""",
+            (team_id, today),
+        ).fetchone()
+        if prev and prev[0] > 10000 and stats["raised"] < prev[0] * 0.5:
+            print(
+                f"  GUARD: {stats['name']} raised ${stats['raised']:,.2f} is "
+                f"<50% of previous ${prev[0]:,.2f} — carrying previous values "
+                f"forward (API glitch?)",
+                file=sys.stderr,
+            )
+            errors.append(f"{stats['name']}: implausible raised collapse, kept previous")
+            stats["raised"] = prev[0]
+            stats["members_count"] = prev[1]
+            stats["sub_team_count"] = prev[2]
+            for key, val in zip(
+                ("riders_count", "challengers_count", "volunteers_count"), prev[3:6]
+            ):
+                stats[key] = val
+
     # Store — refuse to save partial results (>20% failure likely means
     # transient API issue; storing would overwrite good data for today)
     min_required = int(total * 0.8)

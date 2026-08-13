@@ -221,6 +221,7 @@ export interface OrgSnapshot {
   volunteers_count: number;
   last_scraped: string;
   snapshot_date?: string;
+  kids_raised?: number;
 }
 
 export interface BundleData {

@@ -682,7 +682,23 @@ def _get_org_leaderboard(conn):
         WHERE snapshot_date = ?
         ORDER BY raised DESC
     """, (latest,)).fetchall()
-    return [dict(r) for r in rows]
+    out = [dict(r) for r in rows]
+    # Fold Pelotonia Kids (separate PledgeIt platform, never in the org
+    # reconstruction) into Huntington's row, matching the top-bar treatment.
+    # kids_raised is kept as its own field so the frontend can annotate.
+    kids_row = conn.execute(
+        "SELECT estimated_amount_raised FROM kids_snapshots ORDER BY snapshot_date DESC LIMIT 1"
+    ).fetchone()
+    kids_raised = kids_row["estimated_amount_raised"] if kids_row else 0
+    if kids_raised:
+        for r in out:
+            if r["team_id"] == PARENT_TEAM_ID:
+                r["raised"] += kids_raised
+                r["all_time_raised"] += kids_raised
+                r["kids_raised"] = kids_raised
+                break
+        out.sort(key=lambda r: -(r["raised"] or 0))
+    return out
 
 
 def _get_org_snapshots(conn):

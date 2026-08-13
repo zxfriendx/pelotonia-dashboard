@@ -336,6 +336,10 @@ def _seed_data(conn):
         "INSERT INTO org_snapshots VALUES (?,?,?,?,?,?,?,?,?,?,?,?)",
         ("2026-04-01", "org002", "Org Two", 150, 8, 60000.0, 80000.0, 400000.0, 90, 40, 20, "2026-04-01T10:00:00"),
     )
+    conn.execute(
+        "INSERT INTO org_snapshots VALUES (?,?,?,?,?,?,?,?,?,?,?,?)",
+        ("2026-04-01", PARENT_TEAM_ID, "Team Huntington Bank", 300, 15, 90000.0, 120000.0, 600000.0, 150, 60, 40, "2026-04-01T10:00:00"),
+    )
 
     conn.commit()
 

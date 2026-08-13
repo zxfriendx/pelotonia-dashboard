@@ -84,6 +84,9 @@ export function LeaderboardTab() {
         <div className={kpiStyles.kpi}>
           <div className={kpiStyles.value}>{money(huntington?.raised || 0)}</div>
           <div className={kpiStyles.label}>Huntington Raised</div>
+          {(huntington?.kids_raised ?? 0) > 0 && (
+            <div className={kpiStyles.kpiShare}>incl. {money(huntington?.kids_raised ?? 0)} Pelotonia Kids</div>
+          )}
         </div>
         <div className={kpiStyles.kpi}>
           <div className={kpiStyles.value}>{huntingtonPct}%</div>
