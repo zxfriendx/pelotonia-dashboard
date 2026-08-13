@@ -85,8 +85,9 @@ export function KpiStrip() {
         shareText={tickerAvailable ? `${raisedSharePct}% of total` : undefined}
       />
       <FlipCard
-        frontValue={money(allTime)}
+        frontValue={money(allTime + kidsRaised)}
         frontLabel="All-Time Raised"
+        frontSubText={kidsRaised > 0 ? `incl. ${money(kidsRaised)} Pelotonia Kids` : undefined}
         backValue={pelAllTime > 0 ? money(pelAllTime) : 'N/A'}
         backLabel="All Pelotonia"
       />
