@@ -6,6 +6,7 @@ import {
   REGISTRATION_OPEN,
   RIDE_WEEKEND,
   FUNDRAISING_CLOSE,
+  nextRideEvent,
 } from '../../types/constants';
 import { ThermoCard } from './ThermoCard';
 import { SummaryCards } from './SummaryCards';
@@ -76,7 +77,8 @@ export function InfographicsTab() {
   // Timeline calculations
   const now = new Date();
   const regDay = Math.max(1, Math.floor((now.getTime() - REGISTRATION_OPEN.getTime()) / 86400000) + 1);
-  const daysToRide = Math.max(0, Math.ceil((RIDE_WEEKEND.getTime() - now.getTime()) / 86400000));
+  const rideEvent = nextRideEvent(now);
+  const daysToRide = Math.max(0, Math.ceil((rideEvent.date.getTime() - now.getTime()) / 86400000));
   const daysToClose = Math.max(0, Math.ceil((FUNDRAISING_CLOSE.getTime() - now.getTime()) / 86400000));
   const fundsDaysTotal = Math.ceil((FUNDRAISING_CLOSE.getTime() - REGISTRATION_OPEN.getTime()) / 86400000);
   const rideDaysTotal = Math.ceil((RIDE_WEEKEND.getTime() - REGISTRATION_OPEN.getTime()) / 86400000);
@@ -122,7 +124,7 @@ export function InfographicsTab() {
     }
     return [
       { v: 'Day ' + regDay, l: 'Campaign' },
-      { v: daysToRide + 'd', l: 'To Ride' },
+      { v: daysToRide + 'd', l: rideEvent.chipLabel },
       { v: (riders + challengers + volunteers).toLocaleString(), l: 'Total' },
     ];
   }

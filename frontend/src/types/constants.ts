@@ -10,9 +10,20 @@ export const BRAND = {
 export const LAST_YEAR_TOTAL = 5009310;
 export const REGISTRATION_OPEN = new Date(2026, 2, 4);
 export const RIDE_WEEKEND = new Date(2026, 7, 1);
+export const GRAVEL_DAY = new Date(2026, 9, 3);
 export const FUNDRAISING_CLOSE = new Date(2026, 9, 15);
 export const CAMPAIGN_START = REGISTRATION_OPEN;
 export const CAMPAIGN_END = FUNDRAISING_CLOSE;
+
+// The countdown target rolls forward: Ride Weekend (Aug 1-2) until it has
+// passed, then Gravel Day (Oct 3).
+export function nextRideEvent(now: Date): { date: Date; label: string; chipLabel: string; dayText: string } {
+  const rideWeekendEnd = new Date(RIDE_WEEKEND.getTime() + 2 * 86400000);
+  if (now < rideWeekendEnd) {
+    return { date: RIDE_WEEKEND, label: 'Ride Weekend', chipLabel: 'To Ride', dayText: 'Ride Day!' };
+  }
+  return { date: GRAVEL_DAY, label: 'Gravel Day', chipLabel: 'To Gravel', dayText: 'Gravel Day!' };
+}
 
 export const GOALS_2026 = { riders: 2100, challengers: 547, volunteers: 1500 } as const;
 
