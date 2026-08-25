@@ -12,6 +12,7 @@ const TAB_LABELS: Record<TabId, string> = {
   donors: 'Donors',
   companies: 'Companies',
   donations: 'Donations',
+  commitments: 'Commitments',
   infographics: 'Infographics',
   report: 'Daily Report',
   kids: 'Pelotonia Kids',

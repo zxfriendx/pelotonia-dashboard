@@ -7,8 +7,8 @@ import { fetchBundleCore, fetchBundleRest } from '../api/client';
 // components reading e.g. bundle.donations don't crash before that wave resolves.
 const EMPTY_REST: Pick<
   BundleData,
-  'members' | 'donations' | 'donors' | 'companies' | 'orgSnapshots'
-> = { members: [], donations: [], donors: [], companies: [], orgSnapshots: [] };
+  'members' | 'donations' | 'donors' | 'companies' | 'orgSnapshots' | 'commitmentGap'
+> = { members: [], donations: [], donors: [], companies: [], orgSnapshots: [], commitmentGap: null };
 
 interface DashboardStore {
   bundle: BundleData | null;

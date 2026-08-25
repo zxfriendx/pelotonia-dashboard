@@ -10,7 +10,7 @@ pelotonia-dashboard/
 │   ├── pelotonia_scraper.py            # Main data scraper (Pelotonia API → SQLite)
 │   ├── pledgeit_scraper.py             # Pelotonia Kids stats scraper (PledgeIt → SQLite)
 │   ├── org_scraper.py                  # Organization leaderboard scraper (~55 parent orgs)
-│   ├── dashboard.py                    # Flask dashboard (port 5050, 11 tabs)
+│   ├── dashboard.py                    # Flask dashboard (port 5050, 12 tabs)
 │   ├── daily_report.py                 # Daily/weekly email report with HTML + PNG infographic
 │   ├── pelotonia_data.db               # SQLite database (not in git)
 │   └── SCRAPER.md                      # Scraper technical guide
@@ -41,7 +41,7 @@ Two historical notes for anyone tracing the commit graph:
 
 ## Dashboard
 
-A single-page Flask application with 11 tabs providing fundraising analytics.
+A single-page Flask application with 12 tabs providing fundraising analytics.
 
 ### Tabs
 
@@ -54,6 +54,7 @@ A single-page Flask application with 11 tabs providing fundraising analytics.
 | **Donors** | Top donors table with recipient breakdown modals |
 | **Companies** | Corporate donor analytics |
 | **Donations** | Donation feed table with search |
+| **Commitments** | Commitment shortfall KPIs + trend chart + per-member gap table (Below/Met/All CSV export) |
 | **Infographics** | Thermometer visualizations per team, editable targets, campaign timeline, prior-year benchmarks |
 | **Daily Report** | Email-style report view with daily/weekly toggle, sub-team filter, KPI cards, top movers |
 | **Pelotonia Kids** | 5 KPIs + 2 line charts from PledgeIt campaign data |
@@ -76,7 +77,7 @@ All endpoints return JSON.
 
 | Endpoint | Description |
 |----------|-------------|
-| `GET /api/bundle` | **Primary** — all 20 data sets in one response (mtime-cached) |
+| `GET /api/bundle` | **Primary** — all 21 data sets in one response (mtime-cached) |
 | `GET /api/overview` | Team KPIs: raised (sub-team totals + parent general peloton funds), goal, members, donors, survivors, high rollers |
 | `GET /api/teams` | Sub-teams sorted by raised |
 | `GET /api/fundraising-timeline` | Cumulative and daily donation amounts over time |
@@ -94,6 +95,7 @@ All endpoints return JSON.
 | `GET /api/members` | All members with full detail |
 | `GET /api/donations` | Donation feed (most recent 500) |
 | `GET /api/companies` | Corporate donor analytics |
+| `GET /api/commitment-gap` | Commitment fulfillment: summary + per-member shortfall + trend timeline |
 | `GET /api/kids-overview` | Pelotonia Kids aggregate stats |
 | `GET /api/kids-snapshots` | Pelotonia Kids historical snapshots |
 | `GET /api/org-leaderboard` | Organization leaderboard (latest per org) |

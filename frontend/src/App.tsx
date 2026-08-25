@@ -16,6 +16,7 @@ import { InfographicsTab } from './tabs/InfographicsTab/InfographicsTab';
 import { ReportTab } from './tabs/ReportTab';
 import { KidsTab } from './tabs/KidsTab';
 import { LeaderboardTab } from './tabs/LeaderboardTab';
+import { CommitmentsTab } from './tabs/CommitmentsTab';
 import { ModalRouter } from './components/modals/ModalRouter';
 import type { TabId } from './types/constants';
 
@@ -27,6 +28,7 @@ const TAB_COMPONENTS: Record<TabId, React.FC> = {
   donors: DonorsTab,
   companies: CompaniesTab,
   donations: DonationsTab,
+  commitments: CommitmentsTab,
   infographics: InfographicsTab,
   report: ReportTab,
   kids: KidsTab,

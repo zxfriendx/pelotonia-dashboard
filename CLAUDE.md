@@ -49,7 +49,7 @@ Data is sourced from the Pelotonia API, PledgeIt campaign page, and organization
 - **goal_override**: Column included in CREATE TABLE schema and preserved by ON CONFLICT UPDATE (scraper never overwrites it)
 
 ## Dashboard Details
-- **Primary endpoint**: `/api/bundle` — returns all 20 data sets in one response, used by the frontend
+- **Primary endpoint**: `/api/bundle` — returns all 21 data sets in one response, used by the frontend
 - **Cache**: mtime-based — the bundle is rebuilt only when `pelotonia_data.db`'s file mtime changes
 - **Individual endpoints** (`/api/overview`, `/api/teams`, etc.) still work independently for ad-hoc queries
 - **Frontend**: React SPA built to `frontend/dist/`, served by Flask's catch-all route
@@ -58,7 +58,7 @@ Data is sourced from the Pelotonia API, PledgeIt campaign page, and organization
 - 3 flip cards: Raised (2026), All-Time Raised, Members — flip to show All Pelotonia totals from ticker API
 - 5 simple cards: First Year Riders, Signature Riders, Gravel Riders, Cancer Survivors, High Rollers
 
-### Tabs (11 total)
+### Tabs (12 total)
 - **Overview**: Pelotonia-branded goals panel (editable targets via localStorage, campaign arrow asset, friendly timestamp; funds goal renders as `$XK`), Fundraising Growth dual-axis chart (cumulative line + daily bars) with a footnote that the cumulative total reflects only record-by-record donations and runs below the official raised figure, Participant Signups Over Time (Riders/Challengers/Volunteers lines), Participant Types by Sub-Team chart, Raised by Sub-Team chart
 - **Teams**: 2026 Goals & Progress table (all sub-teams), Participant Types by Sub-Team chart, Raised by Sub-Team chart
 - **Routes & Events**: Signature Ride & Gravel Day signup totals + vertical bar chart (Raised vs Committed) + route tables with member drill-down modals
@@ -66,6 +66,7 @@ Data is sourced from the Pelotonia API, PledgeIt campaign page, and organization
 - **Donors**: Top donors table with recipient breakdown modals
 - **Companies**: Corporate donor analytics with drill-down modal (matches by recognition_name)
 - **Donations**: Donation feed table with search
+- **Commitments**: Commitment-gap view — KPIs (outstanding shortfall, members below commitment, $0-raised count, surplus), dual-axis chart of shortfall $ and members-below over time (reconstructed from record-by-record donations, footnoted), filterable/sortable member table (Below / Met / All) with CSV export and donation modals. Data from `/api/commitment-gap` (bundle key `commitmentGap`, rest wave)
 - **Infographics**: Thermometer-style visualizations per team, editable targets via localStorage, campaign timeline calculations, prior-year benchmarking
 - **Daily Report**: Email-style report view with daily/weekly toggle, sub-team filter, KPI cards, top movers, compact sub-team participation table. In daily mode, when today's (just-written, overnight-only) snapshot is the latest row, it falls back to yesterday's snapshot as "latest" so the delta covers a complete day of activity
 - **Pelotonia Kids**: 5 KPIs (fundraisers, raised, goal, progress %, teams) + 2 line charts from PledgeIt campaign data

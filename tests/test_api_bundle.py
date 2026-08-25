@@ -24,6 +24,7 @@ BUNDLE_KEYS = {
     "kidsSnapshots",
     "orgLeaderboard",
     "orgSnapshots",
+    "commitmentGap",
 }
 
 

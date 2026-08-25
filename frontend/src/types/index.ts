@@ -224,6 +224,38 @@ export interface OrgSnapshot {
   kids_raised?: number;
 }
 
+export interface CommitmentMember {
+  public_id: string;
+  name: string;
+  team_name: string | null;
+  committed_amount: number;
+  raised: number;
+  shortfall: number;
+  pct_fulfilled: number;
+  committed_high_roller: number;
+}
+
+export interface CommitmentTimelinePoint {
+  date: string;
+  shortfall: number;
+  below_count: number;
+}
+
+export interface CommitmentGap {
+  summary: {
+    committed_members: number;
+    met_count: number;
+    below_count: number;
+    zero_count: number;
+    total_committed: number;
+    total_raised_by_committed: number;
+    shortfall_total: number;
+    surplus_total: number;
+  };
+  members: CommitmentMember[];
+  timeline: CommitmentTimelinePoint[];
+}
+
 export interface BundleData {
   overview: Overview;
   teams: Team[];
@@ -245,6 +277,7 @@ export interface BundleData {
   kidsSnapshots: KidsSnapshot[];
   orgLeaderboard: OrgSnapshot[];
   orgSnapshots: OrgSnapshot[];
+  commitmentGap: CommitmentGap | null;
 }
 
 // Modal types

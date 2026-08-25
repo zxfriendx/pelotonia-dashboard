@@ -54,7 +54,7 @@ export const PARENT_TEAM_ID = 'a0s3t00000BKX8sAAH';
 
 export const TAB_IDS = [
   'overview', 'teams', 'routes', 'members', 'donors',
-  'companies', 'donations', 'infographics', 'report', 'kids', 'leaderboard',
+  'companies', 'donations', 'commitments', 'infographics', 'report', 'kids', 'leaderboard',
 ] as const;
 
 export type TabId = typeof TAB_IDS[number];

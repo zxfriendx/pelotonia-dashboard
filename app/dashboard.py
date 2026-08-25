@@ -701,6 +701,84 @@ def _get_org_leaderboard(conn):
     return out
 
 
+def _get_commitment_gap(conn):
+    """Commitment fulfillment: who is below their fundraising commitment.
+
+    - summary/members use the authoritative members.raised.
+    - timeline reconstructs the shortfall over time from the donations table
+      (record-by-record), which excludes hidden donor lists and team-level
+      funds, so its endpoint runs above the summary's shortfall. It shows the
+      trend shape, not the exact current figure.
+    """
+    rows = conn.execute("""
+        SELECT m.public_id, m.name, t.name AS team_name,
+               m.committed_amount, m.raised, m.committed_high_roller
+        FROM members m LEFT JOIN teams t ON t.id = m.team_id
+        WHERE m.team_id IS NOT NULL AND m.committed_amount > 0
+    """).fetchall()
+    members = []
+    for r in rows:
+        shortfall = max(r["committed_amount"] - r["raised"], 0)
+        members.append({
+            "public_id": r["public_id"],
+            "name": r["name"],
+            "team_name": r["team_name"],
+            "committed_amount": r["committed_amount"],
+            "raised": r["raised"],
+            "shortfall": shortfall,
+            "pct_fulfilled": round(min(r["raised"] / r["committed_amount"], 1) * 100, 1),
+            "committed_high_roller": r["committed_high_roller"],
+        })
+    members.sort(key=lambda m: -m["shortfall"])
+    below = [m for m in members if m["shortfall"] > 0]
+    summary = {
+        "committed_members": len(members),
+        "met_count": len(members) - len(below),
+        "below_count": len(below),
+        "zero_count": sum(1 for m in below if m["raised"] == 0),
+        "total_committed": sum(m["committed_amount"] for m in members),
+        "total_raised_by_committed": sum(m["raised"] for m in members),
+        "shortfall_total": sum(m["shortfall"] for m in members),
+        "surplus_total": sum(m["raised"] - m["committed_amount"]
+                             for m in members if m["shortfall"] == 0),
+    }
+
+    # Timeline: replay tracked donations against current commitments.
+    commitments = {r["public_id"]: r["committed_amount"] for r in rows}
+    cum = dict.fromkeys(commitments, 0.0)
+    shortfall_now = sum(commitments.values())
+    below_now = len(commitments)
+    timeline = []
+    day_rows = conn.execute("""
+        SELECT DATE(date) AS day, recipient_public_id AS pid, SUM(amount) AS amt
+        FROM donations
+        WHERE recipient_public_id IN (SELECT public_id FROM members
+                                      WHERE team_id IS NOT NULL AND committed_amount > 0)
+          AND date IS NOT NULL
+        GROUP BY day, pid ORDER BY day
+    """).fetchall()
+    current_day = None
+    for r in day_rows:
+        if r["day"] != current_day:
+            if current_day is not None:
+                timeline.append({"date": current_day,
+                                 "shortfall": round(shortfall_now, 2),
+                                 "below_count": below_now})
+            current_day = r["day"]
+        before = cum[r["pid"]]
+        cum[r["pid"]] = before + r["amt"]
+        commit = commitments[r["pid"]]
+        shortfall_now -= min(r["amt"], max(commit - before, 0))
+        if before < commit <= cum[r["pid"]]:
+            below_now -= 1
+    if current_day is not None:
+        timeline.append({"date": current_day,
+                         "shortfall": round(shortfall_now, 2),
+                         "below_count": below_now})
+
+    return {"summary": summary, "members": members, "timeline": timeline}
+
+
 def _get_org_snapshots(conn):
     """All org_snapshots rows ordered by date (for trend charts)."""
     try:
@@ -743,6 +821,7 @@ def _bundle_builders(conn):
         "kidsSnapshots": lambda: _get_kids_snapshots(conn),
         "orgLeaderboard": lambda: _get_org_leaderboard(conn),
         "orgSnapshots": lambda: _get_org_snapshots(conn),
+        "commitmentGap": lambda: _get_commitment_gap(conn),
     }
 
 
@@ -755,8 +834,10 @@ ALL_KEYS = [
     "donations", "teamBreakdown", "commitTiers", "rideTypes", "routes",
     "signupTimeline", "events", "companies", "ticker", "subteamSnapshots",
     "kidsOverview", "kidsSnapshots", "orgLeaderboard", "orgSnapshots",
+    "commitmentGap",
 ]
-REST_KEYS = ["members", "donations", "donors", "companies", "orgSnapshots"]
+REST_KEYS = ["members", "donations", "donors", "companies", "orgSnapshots",
+             "commitmentGap"]
 CORE_KEYS = [k for k in ALL_KEYS if k not in REST_KEYS]
 
 
@@ -820,6 +901,16 @@ def api_kids_overview():
 def api_kids_snapshots():
     conn = get_db()
     data = _get_kids_snapshots(conn)
+    conn.close()
+    return jsonify(data)
+
+
+# ── Commitment gap endpoint ────────────────────────────────────────────────
+
+@app.route("/api/commitment-gap")
+def api_commitment_gap():
+    conn = get_db()
+    data = _get_commitment_gap(conn)
     conn.close()
     return jsonify(data)
 
