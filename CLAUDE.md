@@ -4,7 +4,7 @@
 
 Brand: **Pelotonia (Team Huntington Bank fundraiser)**. Master record: the official kit `~/source/pelotonia-social/raw-data/asset-kit/pel26-social-press-kit/Pel26-Logo-Asset-Guidelines_FINAL.pdf`, with the hex transcription in `frontend/src/styles/variables.css` (this repo). Edit the master first, then sync the copies
 here; never fork a palette into this project. Copies in this repo are derivatives, not
-sources: `frontend/public/pelotonia-arrow-green.png` (cropped from the kit) and § Brand Assets below. Index of every brand's master record and its known copies:
+sources: `frontend/public/pelotonia-arrow-green.png` (cropped from the kit — the main arrow only, no chevron accent; used in the goals-panel progress bars). Index of every brand's master record and its known copies:
 `~/source/infrastructure-docs/registry/brands.md`.
 
 ## Project Purpose
@@ -100,9 +100,6 @@ Data is sourced from the Pelotonia API, PledgeIt campaign page, and organization
 - Company rows → donation detail modal (filtered by recognition_name)
 - Members tab search bar has X Clear button when filter active
 - Members table default sort: 2026 raised (descending), click headers to re-sort
-
-### Brand Assets
-- `frontend/public/pelotonia-arrow-green.png` — Cropped Pelotonia campaign arrow (main arrow only, no chevron accent), used in goals panel progress bars
 
 ## Deployment
 
