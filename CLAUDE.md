@@ -1,5 +1,12 @@
 # Pelotonia Dashboard & Scraper
 
+## Brand
+
+Brand: **Pelotonia (Team Huntington Bank fundraiser)**. Master record: the official kit `~/source/pelotonia-social/raw-data/asset-kit/pel26-social-press-kit/Pel26-Logo-Asset-Guidelines_FINAL.pdf`, with the hex transcription in `frontend/src/styles/variables.css` (this repo). Edit the master first, then sync the copies
+here; never fork a palette into this project. Copies in this repo are derivatives, not
+sources: `frontend/public/pelotonia-arrow-green.png` (cropped from the kit) and § Brand Assets below. Index of every brand's master record and its known copies:
+`~/source/infrastructure-docs/registry/brands.md`.
+
 ## Project Purpose
 Fundraising analytics dashboard and automated data collection for a Pelotonia team.
 Data is sourced from the Pelotonia API, PledgeIt campaign page, and organization endpoints.
