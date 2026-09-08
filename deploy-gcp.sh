@@ -11,6 +11,13 @@ REPO_DIR="${REPO_DIR:-$(cd "$(dirname "$0")" && pwd)}"
 # Add gcloud to PATH if installed in home directory
 [[ -d "$HOME/google-cloud-sdk/bin" ]] && export PATH="$HOME/google-cloud-sdk/bin:$PATH"
 
+# Pin the gcloud identity. The project belongs to this account; without this the
+# script inherits whatever configuration another project last left active, and the
+# build fails with "user is forbidden from accessing the bucket". That is exactly
+# what happened 2026-09-07: an unrelated `gcloud config` switch to securepath
+# silently froze the live dashboard for a day. Override with PELOTONIA_GCP_ACCOUNT.
+export CLOUDSDK_CORE_ACCOUNT="${PELOTONIA_GCP_ACCOUNT:-william.h.friend@gmail.com}"
+
 echo "[$(date -Iseconds)] Starting GCP deploy..."
 
 cd "$REPO_DIR"
