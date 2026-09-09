@@ -132,7 +132,25 @@ def gather_data(weekly=False):
     conn = get_db()
     today = datetime.now().strftime("%Y-%m-%d")
     lookback_days = 7 if weekly else 1
-    compare_date = (datetime.now() - timedelta(days=lookback_days)).strftime("%Y-%m-%d")
+
+    # Snapshots are end-of-day, but today's row is written by the ~11:00 UTC
+    # scrape, so it covers overnight only — the half of the day nobody donates
+    # in. Comparing it to yesterday's final row reports a fraction of a day and
+    # reads as "nothing was raised" once ride weekend passes (2026-09-09: the
+    # email said +$970 against a real last-full-day figure of $10,704). Step
+    # back to the last complete day. The dashboard's Report tab has done this
+    # since it was written — see frontend/src/tabs/ReportTab.tsx; the emailer
+    # never got the same treatment, so the two surfaces disagreed.
+    if not weekly:
+        recent = [r["snapshot_date"] for r in conn.execute(
+            "SELECT DISTINCT snapshot_date FROM daily_snapshots "
+            "WHERE snapshot_date<=? ORDER BY snapshot_date DESC LIMIT 2", (today,)
+        )]
+        if len(recent) == 2 and recent[0] == today:
+            today = recent[1]
+
+    compare_date = (datetime.strptime(today, "%Y-%m-%d")
+                    - timedelta(days=lookback_days)).strftime("%Y-%m-%d")
 
     # Current overview
     parent = conn.execute(
