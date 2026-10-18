@@ -10,6 +10,15 @@
   gap: var(--space-lg);
 }
 
+.closedBanner {
+  background: var(--green);
+  color: var(--black);
+  padding: var(--space-sm) var(--space-lg);
+  text-align: center;
+  font-size: var(--font-size-body);
+  line-height: 1.4;
+}
+
 .headerTitle {
   font-size: var(--font-size-2xl);
   font-weight: 700;

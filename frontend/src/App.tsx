@@ -1,5 +1,6 @@
 import { useEffect } from 'react';
 import { useDashboardStore } from './store/useDashboardStore';
+import { ClosedBanner } from './components/layout/ClosedBanner';
 import { Header } from './components/layout/Header';
 import { Footer } from './components/layout/Footer';
 import { TabBar } from './components/layout/TabBar';
@@ -62,6 +63,7 @@ export function App() {
 
   return (
     <>
+      <ClosedBanner />
       <Header />
       <KpiStrip />
       <ProgressBar />

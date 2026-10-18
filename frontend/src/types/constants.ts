@@ -14,6 +14,8 @@ export const GRAVEL_DAY = new Date(2026, 9, 3);
 export const FUNDRAISING_CLOSE = new Date(2026, 9, 15);
 export const CAMPAIGN_START = REGISTRATION_OPEN;
 export const CAMPAIGN_END = FUNDRAISING_CLOSE;
+// Last day of the post-close daily scrape (see crontab); data is final after it.
+export const DATA_FINAL = new Date(2026, 10, 14);
 
 // The countdown target rolls forward: Ride Weekend (Aug 1-2) until it has
 // passed, then Gravel Day (Oct 3).
