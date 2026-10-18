@@ -230,6 +230,8 @@ export interface CommitmentMember {
   team_name: string | null;
   committed_amount: number;
   raised: number;
+  /** max(raised, attributed) — what Pelotonia measures the commitment against. */
+  credited: number;
   shortfall: number;
   pct_fulfilled: number;
   committed_high_roller: number;
@@ -249,6 +251,7 @@ export interface CommitmentGap {
     zero_count: number;
     total_committed: number;
     total_raised_by_committed: number;
+    total_credited: number;
     shortfall_total: number;
     surplus_total: number;
   };

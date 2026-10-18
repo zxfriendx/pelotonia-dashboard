@@ -13,7 +13,7 @@ import tableStyles from '../styles/table.module.css';
 import layoutStyles from '../styles/layout.module.css';
 import kpiStyles from '../styles/kpi.module.css';
 
-type SortCol = 'name' | 'team' | 'committed' | 'raised' | 'shortfall' | 'pct';
+type SortCol = 'name' | 'team' | 'committed' | 'raised' | 'credited' | 'shortfall' | 'pct';
 type SortDir = 'asc' | 'desc';
 type Filter = 'below' | 'all' | 'met';
 
@@ -51,6 +51,7 @@ export function CommitmentsTab() {
         case 'team': return dir * (shortTeam(a.team_name || '') || '').localeCompare(shortTeam(b.team_name || '') || '');
         case 'committed': return dir * (a.committed_amount - b.committed_amount);
         case 'raised': return dir * (a.raised - b.raised);
+        case 'credited': return dir * (a.credited - b.credited);
         case 'shortfall': return dir * (a.shortfall - b.shortfall);
         case 'pct': return dir * (a.pct_fulfilled - b.pct_fulfilled);
         default: return 0;
@@ -81,10 +82,10 @@ export function CommitmentsTab() {
     downloadCSV(
       filtered.map((m) => [
         m.public_id, m.name, shortTeam(m.team_name || '') || '',
-        m.committed_amount, m.raised, m.shortfall, m.pct_fulfilled,
+        m.committed_amount, m.raised, m.credited, m.shortfall, m.pct_fulfilled,
         m.committed_high_roller ? 'Yes' : '',
       ]),
-      ['Rider ID', 'Name', 'Sub-Team', 'Committed', 'Raised', 'Shortfall', '% Fulfilled', 'High Roller'],
+      ['Rider ID', 'Name', 'Sub-Team', 'Committed', 'Raised', 'Credited', 'Shortfall', '% Fulfilled', 'High Roller'],
       'commitment-gap.csv',
     );
   }, [filtered]);
@@ -108,7 +109,7 @@ export function CommitmentsTab() {
         </div>
         <div className={kpiStyles.kpi}>
           <div className={kpiStyles.value}>{s.zero_count.toLocaleString()}</div>
-          <div className={kpiStyles.label}>$0 Raised</div>
+          <div className={kpiStyles.label}>$0 Credited</div>
         </div>
         <div className={kpiStyles.kpi}>
           <div className={kpiStyles.value}>{money(s.surplus_total)}</div>
@@ -118,12 +119,13 @@ export function CommitmentsTab() {
 
       <div className={layoutStyles.grid} style={{ gridTemplateColumns: '1fr' }}>
         <div className={layoutStyles.card}>
-          <div className={layoutStyles.cardTitle}>Shortfall Over Time</div>
+          <div className={layoutStyles.cardTitle}>Shortfall Over Time (Personal Donations Only)</div>
           <CommitmentGapChart />
           <div style={{ fontSize: 12, color: '#888', fontStyle: 'italic', marginTop: 8 }}>
-            Reconstructed from record-by-record donations against current commitments, so the
-            latest point runs above the authoritative shortfall ({money(s.shortfall_total)}) —
-            donations to members with hidden donor lists aren&apos;t individually recorded.
+            Reconstructed from settled record-by-record donations against current commitments, so
+            the latest point runs above the authoritative shortfall ({money(s.shortfall_total)}).
+            Team funds credited to members carry no date, and donations to members with hidden
+            donor lists aren&apos;t individually recorded.
           </div>
         </div>
 
@@ -181,6 +183,11 @@ export function CommitmentsTab() {
             placeholder="Search by name, rider ID, team..."
           />
 
+          <div style={{ fontSize: 12, color: '#888', fontStyle: 'italic', marginBottom: 8 }}>
+            Credited is the larger of a member&apos;s own raised total and their attributed total,
+            which adds team funds Pelotonia assigns to them. Pelotonia measures commitments against it.
+          </div>
+
           <div style={{ overflowX: 'auto' }}>
             <table className={tableStyles.table}>
               <thead>
@@ -197,6 +204,9 @@ export function CommitmentsTab() {
                   </th>
                   <th className={`text-right ${tableStyles.sortable}`} onClick={() => handleSort('raised')}>
                     Raised {sortCol === 'raised' ? (sortDir === 'asc' ? '▲' : '▼') : ''}
+                  </th>
+                  <th className={`text-right ${tableStyles.sortable}`} onClick={() => handleSort('credited')}>
+                    Credited {sortCol === 'credited' ? (sortDir === 'asc' ? '▲' : '▼') : ''}
                   </th>
                   <th className={`text-right ${tableStyles.sortable}`} onClick={() => handleSort('shortfall')}>
                     Shortfall {sortCol === 'shortfall' ? (sortDir === 'asc' ? '▲' : '▼') : ''}
@@ -223,6 +233,7 @@ export function CommitmentsTab() {
                     <td>{shortTeam(m.team_name || '') || '—'}</td>
                     <td className="text-right">{money(m.committed_amount)}</td>
                     <td className="text-right">{money(m.raised)}</td>
+                    <td className="text-right">{money(m.credited)}</td>
                     <td className="text-right" style={{ color: m.shortfall > 0 ? '#c0392b' : '#1a5632', fontWeight: 600 }}>
                       {m.shortfall > 0 ? money(m.shortfall) : '✓ met'}
                     </td>

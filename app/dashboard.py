@@ -704,29 +704,35 @@ def _get_org_leaderboard(conn):
 def _get_commitment_gap(conn):
     """Commitment fulfillment: who is below their fundraising commitment.
 
-    - summary/members use the authoritative members.raised.
-    - timeline reconstructs the shortfall over time from the donations table
-      (record-by-record), which excludes hidden donor lists and team-level
-      funds, so its endpoint runs above the summary's shortfall. It shows the
-      trend shape, not the exact current figure.
+    - summary/members measure each commitment against the member's *credited*
+      total, max(raised, attributed). `attributed` adds team funds Pelotonia
+      assigns to the member; a 2026-10-18 audit of every committed member found
+      this rule reproduces the API's own `committedMet` flag, while `raised`
+      alone flagged ~1,100 members as short who Pelotonia counts as met.
+    - timeline reconstructs the shortfall over time from settled donations
+      (record-by-record). Team-fund credits carry no date and hidden donor
+      lists aren't recorded, so its endpoint runs above the summary's
+      shortfall. It shows the trend shape, not the exact current figure.
     """
     rows = conn.execute("""
         SELECT m.public_id, m.name, t.name AS team_name,
-               m.committed_amount, m.raised, m.committed_high_roller
+               m.committed_amount, m.raised, m.attributed, m.committed_high_roller
         FROM members m LEFT JOIN teams t ON t.id = m.team_id
         WHERE m.team_id IS NOT NULL AND m.committed_amount > 0
     """).fetchall()
     members = []
     for r in rows:
-        shortfall = max(r["committed_amount"] - r["raised"], 0)
+        credited = max(r["raised"] or 0, r["attributed"] or 0)
+        shortfall = max(r["committed_amount"] - credited, 0)
         members.append({
             "public_id": r["public_id"],
             "name": r["name"],
             "team_name": r["team_name"],
             "committed_amount": r["committed_amount"],
             "raised": r["raised"],
+            "credited": credited,
             "shortfall": shortfall,
-            "pct_fulfilled": round(min(r["raised"] / r["committed_amount"], 1) * 100, 1),
+            "pct_fulfilled": round(min(credited / r["committed_amount"], 1) * 100, 1),
             "committed_high_roller": r["committed_high_roller"],
         })
     members.sort(key=lambda m: -m["shortfall"])
@@ -735,11 +741,12 @@ def _get_commitment_gap(conn):
         "committed_members": len(members),
         "met_count": len(members) - len(below),
         "below_count": len(below),
-        "zero_count": sum(1 for m in below if m["raised"] == 0),
+        "zero_count": sum(1 for m in below if m["credited"] == 0),
         "total_committed": sum(m["committed_amount"] for m in members),
         "total_raised_by_committed": sum(m["raised"] for m in members),
+        "total_credited": sum(m["credited"] for m in members),
         "shortfall_total": sum(m["shortfall"] for m in members),
-        "surplus_total": sum(m["raised"] - m["committed_amount"]
+        "surplus_total": sum(m["credited"] - m["committed_amount"]
                              for m in members if m["shortfall"] == 0),
     }
 
@@ -754,7 +761,7 @@ def _get_commitment_gap(conn):
         FROM donations
         WHERE recipient_public_id IN (SELECT public_id FROM members
                                       WHERE team_id IS NOT NULL AND committed_amount > 0)
-          AND date IS NOT NULL
+          AND date IS NOT NULL AND NOT pending
         GROUP BY day, pid ORDER BY day
     """).fetchall()
     current_day = None
