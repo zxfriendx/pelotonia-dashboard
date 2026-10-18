@@ -290,7 +290,7 @@ session = requests.Session()
 session.headers.update({"Accept": "application/json"})
 
 
-def api_get(path, retries=3, pagination_limit=None):
+def api_get(path, retries=3, pagination_limit=None, strict=False):
     """GET from the P3 API with retry logic and automatic pagination.
 
     Args:
@@ -299,6 +299,8 @@ def api_get(path, retries=3, pagination_limit=None):
         pagination_limit: If set, fetches pages of this size until all results
             are retrieved.  The API uses header-based pagination with
             Pagination-Page, Pagination-Limit, Pagination-Count, Pagination-Total.
+        strict: Return None instead of a partial list when a later page fails.
+            Callers that prune against the result need the complete list.
     """
     url = f"{API_BASE}/{path}"
     headers = {}
@@ -326,6 +328,9 @@ def api_get(path, retries=3, pagination_limit=None):
                         if not page_data:
                             break
                         data.extend(page_data)
+                    if strict and len(data) < total:
+                        log.warning(f"Incomplete pagination for {path}: {len(data)}/{total}")
+                        return None
                     if len(data) > total:
                         data = data[:total]
                 return data
@@ -752,7 +757,13 @@ def scrape_member_routes(conn, public_ids=None):
 
 
 def scrape_donations(conn, public_ids=None):
-    """Scrape donations received by each member."""
+    """Scrape donations received by each member.
+
+    The fetched list is authoritative for that member: stored donations it no
+    longer contains (refunded, reversed or moved by Pelotonia) are deleted.
+    Pruning only happens on a complete, non-empty list, so a failed or empty
+    response never wipes history.
+    """
     now = datetime.now(timezone.utc).isoformat()
 
     if public_ids is None:
@@ -764,12 +775,23 @@ def scrape_donations(conn, public_ids=None):
 
     log.info(f"Scraping donations for {len(public_ids)} members...")
     total_donations = 0
+    total_pruned = 0
 
     for i, pid in enumerate(public_ids):
         time.sleep(REQUEST_DELAY)
-        donations = api_get(f"user/{pid}/donations", pagination_limit=200)
+        donations = api_get(f"user/{pid}/donations", pagination_limit=200, strict=True)
         if not donations or not isinstance(donations, list):
             continue
+
+        keep = [d["opportunityId"] for d in donations]
+        pruned = conn.execute(
+            f"DELETE FROM donations WHERE recipient_public_id=? "
+            f"AND opportunity_id NOT IN ({','.join('?' * len(keep))})",
+            (pid, *keep),
+        ).rowcount
+        if pruned:
+            log.info(f"  {pid}: removed {pruned} donations no longer listed by the API")
+            total_pruned += pruned
 
         for d in donations:
             donor = d.get("donor", {})
@@ -797,8 +819,23 @@ def scrape_donations(conn, public_ids=None):
         if (i + 1) % 25 == 0:
             log.info(f"  Donations: {i+1}/{len(public_ids)} members processed")
 
-    log.info(f"Total donation records: {total_donations}")
+    log.info(f"Total donation records: {total_donations} ({total_pruned} stale removed)")
     return total_donations
+
+
+def reconcile_donations(conn):
+    """Re-fetch every member's donations so removed gifts get pruned.
+
+    The incremental scrape only re-fetches members whose raised $ changed, so a
+    refunded or moved donation can sit in the table indefinitely.
+    """
+    pids = [r[0] for r in conn.execute("""
+        SELECT public_id FROM members
+        WHERE (raised > 0 OR public_id IN (SELECT recipient_public_id FROM donations))
+          AND (is_donor_list_visible=1 OR is_donor_list_visible IS NULL)
+    """)]
+    log.info(f"Reconciling donations for {len(pids)} members")
+    scrape_donations(conn, pids)
 
 
 # ---------------------------------------------------------------------------
@@ -1039,6 +1076,8 @@ def scrape_incremental(conn, trueup=False):
         log.info(f"Trueup: clearing and re-fetching routes for {len(on_team)} on-team members")
         conn.execute("DELETE FROM member_routes")
         scrape_member_routes(conn, on_team)
+        reconcile_donations(conn)
+        build_donor_identities(conn)
         record_daily_snapshot(conn)  # rebuild snapshot with pruned counts
         log.info(f"Trueup: pruned {pruned} members, refreshed {len(all_ids)} profiles + routes")
 
@@ -1239,6 +1278,8 @@ def main():
                              "+ re-fetch every surviving profile")
     parser.add_argument("--backfill-donations", action="store_true",
                         help="Fetch donations for members with raised > 0 but no donation records")
+    parser.add_argument("--reconcile-donations", action="store_true",
+                        help="Re-fetch every member's donations and delete ones the API no longer lists")
     args = parser.parse_args()
 
     conn = init_db(args.db)
@@ -1270,6 +1311,14 @@ def main():
             scrape_donations(conn, pids)
             build_donor_identities(conn)
             conn.commit()
+        print_summary(conn)
+        conn.close()
+        return
+
+    if args.reconcile_donations:
+        reconcile_donations(conn)
+        build_donor_identities(conn)
+        conn.commit()
         print_summary(conn)
         conn.close()
         return

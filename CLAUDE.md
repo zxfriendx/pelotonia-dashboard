@@ -47,6 +47,8 @@ Data is sourced from the Pelotonia API, PledgeIt campaign page, and organization
 - **Pagination**: Header-based (`Pagination-Page`, `Pagination-Limit`)
 - **Incremental mode**: `--incremental` refreshes teams+members (~34 API calls when stable), plus profiles for new/stale/old (7+ days) members, re-fetches routes for refreshed members, and donations only for members whose raised amount changed. Full scrape ~4min.
 - **True-up mode**: `--trueup` runs the incremental scrape, then (a) soft-prunes members not seen this run — clears `team_id`, zeros participation flags, and removes their `member_routes`, but keeps the rows so donation history (NOT NULL FK to `members.public_id`) survives — (b) re-fetches every surviving member's profile so participation flags are authoritative, and (c) clears `member_routes` and re-fetches every on-team member's routes — the only path that catches route *changes*, since the daily roster refresh keeps `last_scraped` current and so the incremental's stale-profile route re-fetch never fires. Run weekly to reconcile the DB with departures the daily incremental never removes.
+- **Donation pruning**: `scrape_donations` treats each member's fetched list as authoritative and deletes stored donations the API no longer lists (refunded/moved gifts). It prunes only on a complete, non-empty list (`api_get(..., strict=True)` returns None on a failed page). Before 2026-10-18 nothing was ever deleted, so stale gifts accumulated (e.g. PN0014 held $15K of records against $5K raised).
+- **Reconcile mode**: `--reconcile-donations` re-fetches every visible member's donations to apply that pruning everywhere (the incremental only re-fetches members whose raised changed). `--trueup` runs it too.
 - **Backfill mode**: `--backfill-donations` fetches donations for members with raised > 0 but no donation records (one-time catch-up)
 - **first_scraped**: Members table records `first_scraped` (set once on insert, backfilled from `last_scraped` for pre-existing rows) — surfaced as the "Signed Up" column on the Members tab
 - **Atomic commits**: All scrape changes committed in a single transaction at the end, preventing dashboard from serving partial data mid-scrape
@@ -61,6 +63,9 @@ Data is sourced from the Pelotonia API, PledgeIt campaign page, and organization
 - **Individual endpoints** (`/api/overview`, `/api/teams`, etc.) still work independently for ad-hoc queries
 - **Frontend**: React SPA built to `frontend/dist/`, served by Flask's catch-all route
 
+### Campaign-closed banner
+`components/layout/ClosedBanner.tsx` shows a green banner above the header once `FUNDRAISING_CLOSE` (Oct 15, 2026, in `types/constants.ts`) has passed. Its second line says data updates daily through `DATA_FINAL` (Nov 14), then switches to "Totals are final".
+
 ### KPI Strip (top cards)
 - 3 flip cards: Raised (2026), All-Time Raised, Members — flip to show All Pelotonia totals from ticker API
 - 5 simple cards: First Year Riders, Signature Riders, Gravel Riders, Cancer Survivors, High Rollers
@@ -73,7 +78,7 @@ Data is sourced from the Pelotonia API, PledgeIt campaign page, and organization
 - **Donors**: Top donors table with recipient breakdown modals
 - **Companies**: Corporate donor analytics with drill-down modal (matches by recognition_name)
 - **Donations**: Donation feed table with search
-- **Commitments**: Commitment-gap view — KPIs (outstanding shortfall, members below commitment, $0-raised count, surplus), dual-axis chart of shortfall $ and members-below over time (reconstructed from record-by-record donations, footnoted), filterable/sortable member table (Below / Met / All) with CSV export and donation modals. Data from `/api/commitment-gap` (bundle key `commitmentGap`, rest wave)
+- **Commitments**: Commitment-gap view. A commitment is measured against **credited = max(raised, attributed)** — `attributed` adds team funds Pelotonia assigns to the member. A 2026-10-18 audit of every committed member against the API's `committedMet` flag confirmed this rule; `raised` alone overstated the shortfall ~3x. KPIs (outstanding shortfall, members below commitment, $0-raised count, surplus), dual-axis chart of shortfall $ and members-below over time (reconstructed from record-by-record donations, footnoted), filterable/sortable member table (Below / Met / All) with CSV export and donation modals. Data from `/api/commitment-gap` (bundle key `commitmentGap`, rest wave)
 - **Infographics**: Thermometer-style visualizations per team, editable targets via localStorage, campaign timeline calculations, prior-year benchmarking
 - **Daily Report**: Email-style report view with daily/weekly toggle, sub-team filter, KPI cards, top movers, compact sub-team participation table. In daily mode, when today's (just-written, overnight-only) snapshot is the latest row, it falls back to yesterday's snapshot as "latest" so the delta covers a complete day of activity
 - **Pelotonia Kids**: 5 KPIs (fundraisers, raised, goal, progress %, teams) + 2 line charts from PledgeIt campaign data
@@ -116,14 +121,16 @@ Data is sourced from the Pelotonia API, PledgeIt campaign page, and organization
 - **Backend restart**: Kill Flask process and re-run `app/.venv/bin/python app/dashboard.py --port 5050`
 
 ### Local Cron Jobs
-Scrapers run 3× daily at 7am, 1pm, 7pm ET (11:00, 17:00, 23:00 UTC). Scrape and GCP deploy are chained in a single cron entry so the deploy waits for the scraper's atomic commit before packaging the SQLite DB into the container image (previously the deploy fired on a fixed timer and often bundled stale data).
+**Post-close schedule (from 2026-10-18):** fundraising closed Oct 15, 2026. Scraping runs once a day — 7am ET Mon–Sat, with Sunday's scrape being the 01:00 UTC true-up — and both cron lines carry a `[ "$(date -u +%Y%m%d)" -le 20261114 ]` guard, so the last scrape is Sat Nov 14 and nothing scrapes or deploys after that. Remove the dead lines (and the daily/weekly email lines) once you're done with the season. Pre-change crontab: `~/crontab.bak-2026-10-18-pelotonia-close`.
+
+During the campaign scrapers ran 3× daily at 7am, 1pm, 7pm ET (11:00, 17:00, 23:00 UTC). Scrape and GCP deploy are chained in a single cron entry so the deploy waits for the scraper's atomic commit before packaging the SQLite DB into the container image (previously the deploy fired on a fixed timer and often bundled stale data).
 ```
-0 11,17,23 * * * cd /home/zabx/source/pelotonia-dashboard && export PATH="$HOME/google-cloud-sdk/bin:$PATH" && app/.venv/bin/python app/pelotonia_scraper.py --incremental && app/.venv/bin/python app/pledgeit_scraper.py && app/.venv/bin/python app/org_scraper.py && bash deploy-gcp.sh >> scraper.log 2>&1
+0 11 * * 1-6 [ "$(date -u +\%Y\%m\%d)" -le 20261114 ] && cd /home/zabx/source/pelotonia-dashboard && export PATH="$HOME/google-cloud-sdk/bin:$PATH" && app/.venv/bin/python app/pelotonia_scraper.py --incremental && app/.venv/bin/python app/pledgeit_scraper.py && app/.venv/bin/python app/org_scraper.py && bash deploy-gcp.sh >> scraper.log 2>&1
 ```
 
-A weekly true-up runs Sundays at 09:00 UTC (5am ET) to reconcile departures and refresh every member's profile:
+A weekly true-up runs Sundays at 01:00 UTC (~3h run) to reconcile departures, refresh every member's profile, and reconcile donations:
 ```
-0 9 * * 0 cd /home/zabx/source/pelotonia-dashboard && export PATH="$HOME/google-cloud-sdk/bin:$PATH" && app/.venv/bin/python app/pelotonia_scraper.py --trueup && bash deploy-gcp.sh >> scraper.log 2>&1
+0 1 * * 0 [ "$(date -u +\%Y\%m\%d)" -le 20261114 ] && cd /home/zabx/source/pelotonia-dashboard && export PATH="$HOME/google-cloud-sdk/bin:$PATH" && app/.venv/bin/python app/pelotonia_scraper.py --trueup && bash deploy-gcp.sh >> scraper.log 2>&1
 ```
 
 ### Kubernetes
