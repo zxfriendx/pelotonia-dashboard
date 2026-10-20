@@ -2,10 +2,7 @@
 
 ## Brand
 
-Brand: **Pelotonia (Team Huntington Bank fundraiser)**. Master record: the official kit `~/source/pelotonia-social/raw-data/asset-kit/pel26-social-press-kit/Pel26-Logo-Asset-Guidelines_FINAL.pdf`, with the hex transcription in `frontend/src/styles/variables.css` (this repo). Edit the master first, then sync the copies
-here; never fork a palette into this project. Copies in this repo are derivatives, not
-sources: `frontend/public/pelotonia-arrow-green.png` (cropped from the kit — the main arrow only, no chevron accent; used in the goals-panel progress bars). Index of every brand's master record and its known copies:
-`~/source/infrastructure-docs/registry/brands.md`.
+Brand: **Pelotonia (Team Huntington Bank fundraiser)**. Master record: Pelotonia's official 2026 logo & asset guidelines (press kit, not included in this repo), with the hex transcription in `frontend/src/styles/variables.css` (mirrored in `BRAND` in `frontend/src/types/constants.ts`). Change colors against the official kit, then sync both copies; never invent a palette here. `frontend/public/pelotonia-arrow-green.png` is cropped from the kit (the main arrow only, no chevron accent; used in the goals-panel progress bars).
 
 ## Project Purpose
 Fundraising analytics dashboard and automated data collection for a Pelotonia team.
@@ -47,7 +44,7 @@ Data is sourced from the Pelotonia API, PledgeIt campaign page, and organization
 - **Pagination**: Header-based (`Pagination-Page`, `Pagination-Limit`)
 - **Incremental mode**: `--incremental` refreshes teams+members (~34 API calls when stable), plus profiles for new/stale/old (7+ days) members, re-fetches routes for refreshed members, and donations only for members whose raised amount changed. Full scrape ~4min.
 - **True-up mode**: `--trueup` runs the incremental scrape, then (a) soft-prunes members not seen this run — clears `team_id`, zeros participation flags, and removes their `member_routes`, but keeps the rows so donation history (NOT NULL FK to `members.public_id`) survives — (b) re-fetches every surviving member's profile so participation flags are authoritative, and (c) clears `member_routes` and re-fetches every on-team member's routes — the only path that catches route *changes*, since the daily roster refresh keeps `last_scraped` current and so the incremental's stale-profile route re-fetch never fires. Run weekly to reconcile the DB with departures the daily incremental never removes.
-- **Donation pruning**: `scrape_donations` treats each member's fetched list as authoritative and deletes stored donations the API no longer lists (refunded/moved gifts). It prunes only on a complete, non-empty list (`api_get(..., strict=True)` returns None on a failed page). Before 2026-10-18 nothing was ever deleted, so stale gifts accumulated (e.g. PN0014 held $15K of records against $5K raised).
+- **Donation pruning**: `scrape_donations` treats each member's fetched list as authoritative and deletes stored donations the API no longer lists (refunded/moved gifts). It prunes only on a complete, non-empty list (`api_get(..., strict=True)` returns None on a failed page). Before 2026-10-18 nothing was ever deleted, so stale gifts accumulated (one member held $15K of records against $5K raised).
 - **Reconcile mode**: `--reconcile-donations` re-fetches every visible member's donations to apply that pruning everywhere (the incremental only re-fetches members whose raised changed). `--trueup` runs it too.
 - **Backfill mode**: `--backfill-donations` fetches donations for members with raised > 0 but no donation records (one-time catch-up)
 - **first_scraped**: Members table records `first_scraped` (set once on insert, backfilled from `last_scraped` for pre-existing rows) — surfaced as the "Signed Up" column on the Members tab
@@ -74,7 +71,7 @@ Data is sourced from the Pelotonia API, PledgeIt campaign page, and organization
 - **Overview**: Pelotonia-branded goals panel (editable targets via localStorage, campaign arrow asset, friendly timestamp; funds goal renders as `$XK`), Fundraising Growth dual-axis chart (cumulative line + daily bars) with a footnote that the cumulative total reflects only record-by-record donations and runs below the official raised figure, Participant Signups Over Time (Riders/Challengers/Volunteers lines), Participant Types by Sub-Team chart, Raised by Sub-Team chart
 - **Teams**: 2026 Goals & Progress table (all sub-teams), Participant Types by Sub-Team chart, Raised by Sub-Team chart
 - **Routes & Events**: Signature Ride & Gravel Day signup totals + vertical bar chart (Raised vs Committed) + route tables with member drill-down modals
-- **Members**: KPI cards (member count, unique donors, avg donors/member), searchable/sortable member table with donation modals, column header click-to-sort (Rider ID, Name, Sub-Team, Type, Years, Raised, All-Time, Signed Up), "Rider ID" column from `public_id` (the Pelotonia rider ID, e.g. `PF0041`/`TW766516` — searchable and CSV-exported), "Signed Up" column from `first_scraped`, cross-tab navigation from other tabs. Type column (`utils/memberType.ts`): Rider > Challenger > Volunteer > untyped-with-route→Rider > on-team-but-untyped→**Registered** > off-team→`—`. The type-search box matches the derived label (e.g. "registered", "volunteer")
+- **Members**: KPI cards (member count, unique donors, avg donors/member), searchable/sortable member table with donation modals, column header click-to-sort (Rider ID, Name, Sub-Team, Type, Years, Raised, All-Time, Signed Up), "Rider ID" column from `public_id` (the Pelotonia rider ID, two letters + digits, e.g. `AB123456` — searchable and CSV-exported), "Signed Up" column from `first_scraped`, cross-tab navigation from other tabs. Type column (`utils/memberType.ts`): Rider > Challenger > Volunteer > untyped-with-route→Rider > on-team-but-untyped→**Registered** > off-team→`—`. The type-search box matches the derived label (e.g. "registered", "volunteer")
 - **Donors**: Top donors table with recipient breakdown modals
 - **Companies**: Corporate donor analytics with drill-down modal (matches by recognition_name)
 - **Donations**: Donation feed table with search
@@ -114,23 +111,23 @@ Data is sourced from the Pelotonia API, PledgeIt campaign page, and organization
 - **Container**: Bakes SQLite DB into image (no external DB). Updated daily via auto-deploy.
 
 ### Local Development Server
-- **Access**: `http://100.101.251.71:5050/` via Tailscale (SSH'd into server)
+- **Access**: `http://<server>:5050/` (the production host was reached over a private VPN; nothing binds publicly)
 - **Process**: Flask serves built frontend from `frontend/dist/`
 - **Frontend build**: `(cd frontend && npm run build)` — rebuilds dist, Flask picks up new assets on next request
 - **Vite dev server**: `(cd frontend && npm run dev)` — runs on port 5173 with API proxy to Flask on 5050
 - **Backend restart**: Kill Flask process and re-run `app/.venv/bin/python app/dashboard.py --port 5050`
 
 ### Local Cron Jobs
-**Post-close schedule (from 2026-10-18):** fundraising closed Oct 15, 2026. Scraping runs once a day — 7am ET Mon–Sat, with Sunday's scrape being the 01:00 UTC true-up — and both cron lines carry a `[ "$(date -u +%Y%m%d)" -le 20261114 ]` guard, so the last scrape is Sat Nov 14 and nothing scrapes or deploys after that. Remove the dead lines (and the daily/weekly email lines) once you're done with the season. Pre-change crontab: `~/crontab.bak-2026-10-18-pelotonia-close`.
+**Post-close schedule:** fundraising closed Oct 15, 2026. From Oct 18 scraping dropped to once a day; on Oct 20 Pelotonia began charging credit-card pledges, so it went back to 3× daily (7am, 1pm, 7pm ET = 11:00, 17:00, 23:00 UTC) plus the Sunday 01:00 UTC true-up. Both cron lines carry a `[ "$(date -u +%Y%m%d)" -le 20261114 ]` guard, so the last scrape is Sat Nov 14 and nothing scrapes or deploys after that. Remove the dead lines (and the daily/weekly email lines) once you're done with the season.
 
-During the campaign scrapers ran 3× daily at 7am, 1pm, 7pm ET (11:00, 17:00, 23:00 UTC). Scrape and GCP deploy are chained in a single cron entry so the deploy waits for the scraper's atomic commit before packaging the SQLite DB into the container image (previously the deploy fired on a fixed timer and often bundled stale data).
+Scrape and GCP deploy are chained in a single cron entry so the deploy waits for the scraper's atomic commit before packaging the SQLite DB into the container image (previously the deploy fired on a fixed timer and often bundled stale data).
 ```
-0 11 * * 1-6 [ "$(date -u +\%Y\%m\%d)" -le 20261114 ] && cd /home/zabx/source/pelotonia-dashboard && export PATH="$HOME/google-cloud-sdk/bin:$PATH" && app/.venv/bin/python app/pelotonia_scraper.py --incremental && app/.venv/bin/python app/pledgeit_scraper.py && app/.venv/bin/python app/org_scraper.py && bash deploy-gcp.sh >> scraper.log 2>&1
+0 11,17,23 * * * [ "$(date -u +\%Y\%m\%d)" -le 20261114 ] && cd /path/to/pelotonia-dashboard && export PATH="$HOME/google-cloud-sdk/bin:$PATH" && app/.venv/bin/python app/pelotonia_scraper.py --incremental && app/.venv/bin/python app/pledgeit_scraper.py && app/.venv/bin/python app/org_scraper.py && bash deploy-gcp.sh >> scraper.log 2>&1
 ```
 
 A weekly true-up runs Sundays at 01:00 UTC (~3h run) to reconcile departures, refresh every member's profile, and reconcile donations:
 ```
-0 1 * * 0 [ "$(date -u +\%Y\%m\%d)" -le 20261114 ] && cd /home/zabx/source/pelotonia-dashboard && export PATH="$HOME/google-cloud-sdk/bin:$PATH" && app/.venv/bin/python app/pelotonia_scraper.py --trueup && bash deploy-gcp.sh >> scraper.log 2>&1
+0 1 * * 0 [ "$(date -u +\%Y\%m\%d)" -le 20261114 ] && cd /path/to/pelotonia-dashboard && export PATH="$HOME/google-cloud-sdk/bin:$PATH" && app/.venv/bin/python app/pelotonia_scraper.py --trueup && bash deploy-gcp.sh >> scraper.log 2>&1
 ```
 
 ### Kubernetes
@@ -180,4 +177,4 @@ A weekly true-up runs Sundays at 01:00 UTC (~3h run) to reconcile departures, re
 3. **Bundle cache not thread-safe** — `_cache` dict in dashboard.py is accessed without locking. Fine for single-threaded Flask dev server, but would need `threading.Lock` under Gunicorn with threads.
 4. **Sub-team snapshots lack participant-type counts** — `daily_snapshots` for sub-teams only record `raised` and `members_count`, not `riders_count`/`challengers_count`/`volunteers_count`. Sub-team report deltas for specific types are approximated.
 5. **Volunteer goals not tracked** — `GOALS_2026_SUBTEAMS` in constants.ts only has rider/challenger/funds goals. Volunteer goal column in TeamsTab always shows 0.
-6. **Roster-vs-profile ghost members** — Pelotonia's team-roster API (`peloton/{team}/members`) keeps returning members whose individual profile (`user/{publicId}`) reports `peloton = null` — i.e. they've left the team or re-registered under a new `publicId` (e.g. Brooke Edmonds appears under both an old dead ID and her active rider ID). As of 2026-07-16 audit: **64** such ghosts (39 untyped/"Registered", 23 volunteers, 2 riders), 13 carrying small donations. Because they stay on the roster, `--trueup`'s soft-prune (which keys off members the roster *stops* returning) never removes them, and `scrape_member_profiles` ignores the profile `peloton` field. Reported to Pelotonia (emailed audit CSV) to ask why the roster returns them; **no fix applied pending their response**. Candidate fix: soft-prune any member whose profile `peloton` is null/mismatched (keep the row for donation FK), wired into the profile scrape / trueup.
+6. **Roster-vs-profile ghost members** — Pelotonia's team-roster API (`peloton/{team}/members`) keeps returning members whose individual profile (`user/{publicId}`) reports `peloton = null` — i.e. they've left the team or re-registered under a new `publicId` (one member was found under both an old dead ID and their active rider ID). As of 2026-07-16 audit: **64** such ghosts (39 untyped/"Registered", 23 volunteers, 2 riders), 13 carrying small donations. Because they stay on the roster, `--trueup`'s soft-prune (which keys off members the roster *stops* returning) never removes them, and `scrape_member_profiles` ignores the profile `peloton` field. Reported to Pelotonia (emailed audit CSV) to ask why the roster returns them; **no fix applied pending their response**. Candidate fix: soft-prune any member whose profile `peloton` is null/mismatched (keep the row for donation FK), wired into the profile scrape / trueup.
