@@ -706,9 +706,10 @@ def _get_commitment_gap(conn):
 
     - summary/members measure each commitment against the member's *credited*
       total, max(raised, attributed). `attributed` adds team funds Pelotonia
-      assigns to the member; a 2026-10-18 audit of every committed member found
-      this rule reproduces the API's own `committedMet` flag, while `raised`
-      alone flagged ~1,100 members as short who Pelotonia counts as met.
+      assigns to the member; a 2026-10-18 audit of all 2,886 committed members
+      found this rule (plus the sub-$1 tolerance below) reproduces the API's
+      own `committedMet` flag for every member but one apparent waiver, while
+      `raised` alone disagreed for 1,130 members.
     - timeline reconstructs the shortfall over time from settled donations
       (record-by-record). Team-fund credits carry no date and hidden donor
       lists aren't recorded, so its endpoint runs above the summary's
@@ -723,7 +724,10 @@ def _get_commitment_gap(conn):
     members = []
     for r in rows:
         credited = max(r["raised"] or 0, r["attributed"] or 0)
-        shortfall = max(r["committed_amount"] - credited, 0)
+        shortfall = r["committed_amount"] - credited
+        # Pelotonia marks a commitment met when it is short by under $1
+        # (e.g. $1,249.67 on $1,250), so treat sub-dollar gaps as met.
+        shortfall = 0 if shortfall < 1 else shortfall
         members.append({
             "public_id": r["public_id"],
             "name": r["name"],
