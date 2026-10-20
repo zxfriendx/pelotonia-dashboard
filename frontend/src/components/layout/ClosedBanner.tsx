@@ -19,7 +19,7 @@ export function ClosedBanner() {
       <strong>Fundraising for Pelotonia 2026 closed on {longDate(FUNDRAISING_CLOSE)}.</strong>{' '}
       {dataFinal
         ? `Totals are final as of ${longDate(DATA_FINAL)}.`
-        : `Late gifts are still posting. Data updates once a day through ${longDate(DATA_FINAL)}.`}
+        : `Pledged gifts are still being charged and posted. Data updates three times a day through ${longDate(DATA_FINAL)}.`}
     </div>
   );
 }

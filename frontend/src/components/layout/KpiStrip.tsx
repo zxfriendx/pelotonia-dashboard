@@ -59,10 +59,11 @@ export function KpiStrip() {
   if (!bundle) return null;
 
   const { overview, ticker } = bundle;
-  // Top-bar total includes Pelotonia Kids (separate PledgeIt platform, so it's
-  // not part of the official team reconstruction in overview.raised).
+  // Pelotonia folds Pelotonia Kids into the team's official totals (since
+  // 2026-10-20), so overview.raised and all_time_raised already include it.
+  // kidsRaised only drives the "incl." annotation.
   const kidsRaised = overview.kids_raised ?? 0;
-  const raised = overview.raised + kidsRaised;
+  const raised = overview.raised;
   const goal = overview.goal;
   const allTime = overview.all_time_raised;
 
@@ -85,7 +86,7 @@ export function KpiStrip() {
         shareText={tickerAvailable ? `${raisedSharePct}% of total` : undefined}
       />
       <FlipCard
-        frontValue={money(allTime + kidsRaised)}
+        frontValue={money(allTime)}
         frontLabel="All-Time Raised"
         frontSubText={kidsRaised > 0 ? `incl. ${money(kidsRaised)} Pelotonia Kids` : undefined}
         backValue={pelAllTime > 0 ? money(pelAllTime) : 'N/A'}

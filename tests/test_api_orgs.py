@@ -43,14 +43,14 @@ def test_org_leaderboard_values(client):
     assert org_one["members_count"] == 200
 
 
-def test_org_leaderboard_huntington_includes_kids(client):
-    """Huntington's row folds in the latest kids_snapshots amount (45000 fixture)."""
+def test_org_leaderboard_huntington_annotates_kids_without_adding(client):
+    """Pelotonia folds Kids into the official totals (since 2026-10-20), so the
+    row carries kids_raised (45000 fixture) as a note but does not add it."""
     data = json.loads(client.get("/api/org-leaderboard").data)
     hunt = next(o for o in data if o["name"] == "Team Huntington Bank")
-    assert hunt["raised"] == 90000.0 + 45000.0
-    assert hunt["all_time_raised"] == 600000.0 + 45000.0
+    assert hunt["raised"] == 90000.0
+    assert hunt["all_time_raised"] == 600000.0
     assert hunt["kids_raised"] == 45000.0
-    # still sorted by raised desc after the fold-in
     raised_values = [o["raised"] for o in data]
     assert raised_values == sorted(raised_values, reverse=True)
 

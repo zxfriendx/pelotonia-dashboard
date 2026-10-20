@@ -44,10 +44,6 @@ from PIL import Image, ImageDraw, ImageFont
 try:
     from dotenv import load_dotenv
     load_dotenv()
-    # Also try pelotonia-kids .env for Gmail creds
-    kids_env = Path(__file__).resolve().parent.parent.parent / "pelotonia-kids" / ".env"
-    if kids_env.exists():
-        load_dotenv(kids_env)
 except ImportError:
     pass
 

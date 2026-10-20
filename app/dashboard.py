@@ -105,8 +105,10 @@ def _get_overview(conn):
         FROM members WHERE team_id IS NOT NULL
     """).fetchone()
     # Pelotonia Kids (Team Huntington's PledgeIt campaign) runs on a separate
-    # platform, so its raised is not part of the official team reconstruction.
-    # Exposed separately; the top-bar KPI adds it to the displayed total.
+    # platform. Until 2026-10-19 Pelotonia left it out of the team totals and
+    # the dashboard added it on top; from 2026-10-20 Pelotonia folds it into the
+    # parent's general peloton funds (raised and all-time both jumped by the
+    # Kids amount), so it is already inside `raised`. Exposed for annotation only.
     kids_row = conn.execute(
         "SELECT estimated_amount_raised FROM kids_snapshots ORDER BY snapshot_date DESC LIMIT 1"
     ).fetchone()
@@ -683,9 +685,8 @@ def _get_org_leaderboard(conn):
         ORDER BY raised DESC
     """, (latest,)).fetchall()
     out = [dict(r) for r in rows]
-    # Fold Pelotonia Kids (separate PledgeIt platform, never in the org
-    # reconstruction) into Huntington's row, matching the top-bar treatment.
-    # kids_raised is kept as its own field so the frontend can annotate.
+    # Pelotonia Kids is already inside Huntington's reconstructed raised (see
+    # _get_overview), so it is not added; kids_raised only annotates the row.
     kids_row = conn.execute(
         "SELECT estimated_amount_raised FROM kids_snapshots ORDER BY snapshot_date DESC LIMIT 1"
     ).fetchone()
@@ -693,11 +694,8 @@ def _get_org_leaderboard(conn):
     if kids_raised:
         for r in out:
             if r["team_id"] == PARENT_TEAM_ID:
-                r["raised"] += kids_raised
-                r["all_time_raised"] += kids_raised
                 r["kids_raised"] = kids_raised
                 break
-        out.sort(key=lambda r: -(r["raised"] or 0))
     return out
 
 
