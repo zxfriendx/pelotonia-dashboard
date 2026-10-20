@@ -115,8 +115,8 @@ Dates are commit dates (YYYY-MM-DD). Hashes are on `master`.
     complete and non-empty. `api_get(..., strict=True)` returns `None` if any
     page fails, so a partial list can't wipe history.
   - New CLI flag `--reconcile-donations` re-fetches every visible member.
-    `--trueup` now runs it weekly. The first run on 2026-10-20 removed about 145
-    stale rows (~$23K).
+    `--trueup` now runs it weekly. The first run on 2026-10-20 removed 167 stale
+    rows.
   - Files: `app/pelotonia_scraper.py`, `CLAUDE.md`
 - **Post-close schedule** (cron, not in git): one scrape a day (3× again from 2026-10-20) through
   2026-11-14, then none. See README § Scheduled jobs.

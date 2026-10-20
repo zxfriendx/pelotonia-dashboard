@@ -107,7 +107,7 @@ The daily incremental never removes anyone, so departures accumulate. The weekly
 
 ### Donation pruning
 
-`scrape_donations` treats each member's fetched list as the truth for that member. After a fetch it deletes that member's stored rows whose `opportunity_id` is missing from the list, which removes refunded, reversed and moved gifts. It prunes only when the list is complete and non-empty: `api_get(..., strict=True)` returns `None` if any page fails, so a partial or failed fetch never deletes anything. `--reconcile-donations` runs this for every member on demand. Before 2026-10-18 the scraper never deleted donations, and about 145 stale rows had piled up.
+`scrape_donations` treats each member's fetched list as the truth for that member. After a fetch it deletes that member's stored rows whose `opportunity_id` is missing from the list, which removes refunded, reversed and moved gifts. It prunes only when the list is complete and non-empty: `api_get(..., strict=True)` returns `None` if any page fails, so a partial or failed fetch never deletes anything. `--reconcile-donations` runs this for every member on demand. Before 2026-10-18 the scraper never deleted donations, and the first full reconcile (2026-10-20) removed 167 stale rows.
 
 ## Pagination
 
