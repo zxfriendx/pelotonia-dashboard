@@ -18,7 +18,7 @@ ChartJS.register(CategoryScale, LinearScale, BarElement, Tooltip, Legend, ChartD
 
 export function RouteFundraisingChart() {
   const bundle = useDashboardStore((s) => s.bundle);
-  const routes = bundle?.routes ?? [];
+  const routes = useMemo(() => bundle?.routes ?? [], [bundle]);
 
   const sorted = useMemo(
     () => [...routes].filter((r) => (r.route_raised || 0) > 0 || (r.route_committed || 0) > 0)

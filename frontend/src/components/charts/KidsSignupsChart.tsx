@@ -17,7 +17,7 @@ ChartJS.register(CategoryScale, LinearScale, PointElement, LineElement, Tooltip,
 
 export function KidsSignupsChart() {
   const bundle = useDashboardStore((s) => s.bundle);
-  const snapshots = bundle?.kidsSnapshots ?? [];
+  const snapshots = useMemo(() => bundle?.kidsSnapshots ?? [], [bundle]);
 
   const data = useMemo(() => ({
     labels: snapshots.map((s) => s.snapshot_date),

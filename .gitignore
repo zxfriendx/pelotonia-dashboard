@@ -13,3 +13,7 @@ scraper.log
 # Frontend
 node_modules/
 frontend/dist/
+.pytest_cache/
+
+# Local agent state (worktrees, settings)
+.claude/

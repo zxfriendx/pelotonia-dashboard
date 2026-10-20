@@ -18,7 +18,7 @@ ChartJS.register(CategoryScale, LinearScale, BarElement, Tooltip, Legend, ChartD
 
 export function RaisedByTeamChart() {
   const bundle = useDashboardStore((s) => s.bundle);
-  const teams = bundle?.teams ?? [];
+  const teams = useMemo(() => bundle?.teams ?? [], [bundle]);
 
   const sorted = useMemo(
     () => [...teams].sort((a, b) => (b.raised || 0) - (a.raised || 0)),

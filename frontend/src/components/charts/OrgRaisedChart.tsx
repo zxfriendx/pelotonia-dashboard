@@ -18,7 +18,7 @@ ChartJS.register(CategoryScale, LinearScale, BarElement, Tooltip, Legend, ChartD
 
 export function OrgRaisedChart() {
   const bundle = useDashboardStore((s) => s.bundle);
-  const orgs = bundle?.orgLeaderboard ?? [];
+  const orgs = useMemo(() => bundle?.orgLeaderboard ?? [], [bundle]);
 
   const top15 = useMemo(
     () => [...orgs].sort((a, b) => (b.raised || 0) - (a.raised || 0)).slice(0, 15),

@@ -658,7 +658,7 @@ def scrape_member_profiles(conn, public_ids=None):
         if (i + 1) % 25 == 0:
             log.info(f"  Profiles: {i+1}/{len(public_ids)}")
 
-    log.info(f"Extended profiles complete")
+    log.info("Extended profiles complete")
 
 
 def scrape_member_routes(conn, public_ids=None):
@@ -1093,7 +1093,7 @@ def build_donor_identities(conn):
     log.info("Building donor identity map...")
 
     # Strategy 1: Same recognitionName appears in both anonymous and non-anonymous donations
-    # If "Jeremy D" donated non-anonymously somewhere else, we know who they are
+    # If "Jane D" donated non-anonymously somewhere else, we know who they are
     conn.execute("""
         INSERT OR REPLACE INTO donor_identities (recognition_name, inferred_name, confidence, source, donor_public_id)
         SELECT
@@ -1112,7 +1112,7 @@ def build_donor_identities(conn):
     """)
 
     # Strategy 2: recognitionName closely matches a known donor_name
-    # e.g., "Tony Farinacci" -> "Anthony Farinacci"
+    # e.g., "Bob Example" -> "Robert Example"
     conn.execute("""
         INSERT OR IGNORE INTO donor_identities (recognition_name, inferred_name, confidence, source, donor_public_id)
         SELECT DISTINCT

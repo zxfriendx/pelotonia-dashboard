@@ -34,7 +34,6 @@ import smtplib
 import sqlite3
 import sys
 from datetime import datetime, timedelta
-from email.mime.base import MIMEBase
 from email.mime.image import MIMEImage
 from email.mime.multipart import MIMEMultipart
 from email.mime.text import MIMEText
@@ -323,7 +322,6 @@ def build_html(data):
     """Build the HTML email body."""
     is_weekly = data.get("period") == "weekly"
     movers_label = "Top Movers This Week" if is_weekly else "Top Movers Today"
-    delta_label = "this week" if is_weekly else "today"
     report_type = "Weekly Report" if is_weekly else "Daily Report"
 
     # Top movers (by raised delta)
@@ -467,9 +465,7 @@ def build_html(data):
     for t in data["teams"]:
         sn = short_name(t["name"])
         goals = GOALS_SUBTEAMS.get(sn, {})
-        rider_goal = goals.get("riders", 0)
         fund_goal = goals.get("funds", 0)
-        rider_pct = f"{t['riders']/rider_goal*100:.0f}%" if rider_goal else "—"
         team_raised = t.get("official_raised") or t.get("total_raised", 0)
         fund_pct = f"{team_raised/fund_goal*100:.0f}%" if fund_goal else "—"
         fund_goal_str = money_short(fund_goal) if fund_goal else "—"

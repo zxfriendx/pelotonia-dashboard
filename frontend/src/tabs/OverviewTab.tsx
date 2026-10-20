@@ -40,7 +40,7 @@ export function OverviewTab() {
   }, [targets]);
 
   const handleTargetClick = useCallback(
-    (key: string, currentTarget: number, _fmt: (v: number) => string) => {
+    (key: string, currentTarget: number) => {
       const input = prompt(`Set new target for ${key}:`, String(currentTarget));
       if (input === null) return;
       const val = Number(input.replace(/[^0-9.]/g, ''));
@@ -137,7 +137,7 @@ export function OverviewTab() {
                   <div
                     className={styles.goalTarget}
                     title="Click to edit target"
-                    onClick={() => handleTargetClick(g.key, g.target, g.fmt)}
+                    onClick={() => handleTargetClick(g.key, g.target)}
                   >
                     {g.fmt(g.target)}
                   </div>

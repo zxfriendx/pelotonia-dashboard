@@ -1,6 +1,7 @@
 """Tests for /api/commitment-gap endpoint."""
 
 import json
+import sqlite3
 
 
 def test_commitment_gap_returns_200(client):
@@ -48,3 +49,28 @@ def test_commitment_gap_timeline(client):
     shortfalls = [t["shortfall"] for t in timeline]
     assert all(a >= b for a, b in zip(shortfalls, shortfalls[1:]))
     assert all(t["below_count"] >= 0 for t in timeline)
+
+
+def test_commitment_gap_uses_credited_and_sub_dollar_tolerance(test_db, client):
+    """Commitments are measured against max(raised, attributed), and Pelotonia
+    treats a shortfall under $1 as met (2026-10-18 audit against committedMet)."""
+    conn = sqlite3.connect(str(test_db))
+    # m002: raised short of $1,500 but team funds bring attributed to the commitment
+    conn.execute("UPDATE members SET raised=1000, attributed=1500 WHERE public_id='m002'")
+    # m003: 50 cents short of $1,000 -> met
+    conn.execute("UPDATE members SET raised=999.5, attributed=999.5 WHERE public_id='m003'")
+    # m004: genuinely short ($200 of $500, nothing attributed)
+    conn.execute("UPDATE members SET raised=200, attributed=0 WHERE public_id='m004'")
+    conn.commit()
+    conn.close()
+
+    data = json.loads(client.get("/api/commitment-gap").data)
+    by_id = {m["public_id"]: m for m in data["members"]}
+    assert by_id["m002"]["credited"] == 1500
+    assert by_id["m002"]["shortfall"] == 0
+    assert by_id["m003"]["shortfall"] == 0
+    assert by_id["m004"]["credited"] == 200
+    assert by_id["m004"]["shortfall"] == 300
+    s = data["summary"]
+    assert s["below_count"] == 1
+    assert s["shortfall_total"] == 300

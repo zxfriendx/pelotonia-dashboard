@@ -20,7 +20,7 @@ ChartJS.register(CategoryScale, LinearScale, PointElement, LineElement, BarEleme
 
 export function FundraisingGrowthChart() {
   const bundle = useDashboardStore((s) => s.bundle);
-  const timeline = bundle?.timeline ?? [];
+  const timeline = useMemo(() => bundle?.timeline ?? [], [bundle]);
 
   const data = useMemo(() => ({
     labels: timeline.map((t) => t.date),

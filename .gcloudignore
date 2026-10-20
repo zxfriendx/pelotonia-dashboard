@@ -12,3 +12,7 @@ frontend/dist/
 tests/
 k8s/
 scraper.log
+# Secrets and local state never go to Cloud Build
+.env
+.claude/
+.pytest_cache/

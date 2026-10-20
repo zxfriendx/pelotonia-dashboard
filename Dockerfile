@@ -10,7 +10,8 @@ RUN npm run build
 FROM python:3.12-slim
 WORKDIR /app
 
-RUN pip install --no-cache-dir flask requests pillow
+COPY app/requirements.txt app/requirements.txt
+RUN pip install --no-cache-dir -r app/requirements.txt
 
 COPY app/ app/
 COPY --from=frontend-build /frontend/dist frontend/dist/

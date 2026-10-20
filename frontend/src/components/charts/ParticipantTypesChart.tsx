@@ -18,7 +18,7 @@ ChartJS.register(CategoryScale, LinearScale, BarElement, Tooltip, Legend, ChartD
 
 export function ParticipantTypesChart() {
   const bundle = useDashboardStore((s) => s.bundle);
-  const breakdown = bundle?.teamBreakdown ?? [];
+  const breakdown = useMemo(() => bundle?.teamBreakdown ?? [], [bundle]);
 
   const sorted = useMemo(
     () => [...breakdown].sort((a, b) => (b.total || 0) - (a.total || 0)),

@@ -12,21 +12,34 @@ interface Props {
 }
 
 export function RouteMembersModal({ routeId, routeName, onClose }: Props) {
-  const [members, setMembers] = useState<RouteMember[]>([]);
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+  // The result is keyed by route so loading is derived, never set in the effect,
+  // and a previous route's members never flash while the next one loads.
+  const [result, setResult] = useState<{
+    routeId: string;
+    members: RouteMember[];
+    error: string | null;
+  } | null>(null);
 
   const isOpen = !!routeId;
 
   useEffect(() => {
-    if (!isOpen || !routeId) return;
-    setLoading(true);
-    setError(null);
+    if (!routeId) return;
+    let cancelled = false;
     fetchRouteMembers(routeId)
-      .then(setMembers)
-      .catch((e) => setError((e as Error).message))
-      .finally(() => setLoading(false));
-  }, [isOpen, routeId]);
+      .then((members) => {
+        if (!cancelled) setResult({ routeId, members, error: null });
+      })
+      .catch((e) => {
+        if (!cancelled) setResult({ routeId, members: [], error: (e as Error).message });
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [routeId]);
+
+  const loading = result?.routeId !== routeId;
+  const members = loading ? [] : (result?.members ?? []);
+  const error = loading ? null : (result?.error ?? null);
 
   if (!isOpen) return null;
 

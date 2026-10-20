@@ -18,7 +18,7 @@ ChartJS.register(CategoryScale, LinearScale, PointElement, LineElement, Tooltip,
 
 export function SignupTimelineChart() {
   const bundle = useDashboardStore((s) => s.bundle);
-  const timeline = bundle?.signupTimeline ?? [];
+  const timeline = useMemo(() => bundle?.signupTimeline ?? [], [bundle]);
 
   const data = useMemo(() => ({
     labels: timeline.map((e) => e.snapshot_date),
