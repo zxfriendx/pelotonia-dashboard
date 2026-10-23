@@ -26,7 +26,7 @@ Dates are commit dates (YYYY-MM-DD). Hashes are on `master`.
 
 ## 2026-10-23: All-time total no longer reduced by the correction
 
-- **All-Time Raised shows Pelotonia's figure again** · this commit
+- **All-Time Raised shows Pelotonia's figure again** · `dc8e8b6`
   - The double-count fix below also subtracted $702,455 from all-time figures,
     which took All-Time Raised from $55,557,268 to $54,854,813 and below the
     $55M the team had passed in early October.
