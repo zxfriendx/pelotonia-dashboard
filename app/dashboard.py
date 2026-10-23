@@ -723,8 +723,8 @@ def _get_org_leaderboard(conn):
             if correction:
                 r["raised_pelotonia_reported"] = r["raised"]
                 r["double_count_correction"] = correction
+                # Current year only: Pelotonia's all-time figure isn't inflated.
                 r["raised"] -= correction
-                r["all_time_raised"] -= correction
             break
     if correction:
         out.sort(key=lambda r: -(r["raised"] or 0))

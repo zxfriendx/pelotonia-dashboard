@@ -24,6 +24,23 @@ Dates are commit dates (YYYY-MM-DD). Hashes are on `master`.
 
 ---
 
+## 2026-10-23: All-time total no longer reduced by the correction
+
+- **All-Time Raised shows Pelotonia's figure again** · this commit
+  - The double-count fix below also subtracted $702,455 from all-time figures,
+    which took All-Time Raised from $55,557,268 to $54,854,813 and below the
+    $55M the team had passed in early October.
+  - Pelotonia's all-time figure was never inflated. On 2026-10-23 the parent's
+    current-year total jumped $680K while its all-time didn't move, and all-time
+    minus current year (prior years) held at about $49.32M until the inflated
+    current-year figure arrived.
+  - Rule now: correct current-year `raised` only; `all_time_raised` is always
+    the reported value, in the scraper and on the Leaderboard row.
+  - One-time repair: restored `all_time_raised` in `teams` and in
+    `daily_snapshots` from 2026-10-14 from the pre-fix backup.
+  - Files: `app/pelotonia_scraper.py`, `app/dashboard.py`,
+    `tests/test_double_count.py`, `README.md`
+
 ## 2026-10-23: Correct Pelotonia's double-counted team funds
 
 - **Scraper subtracts assigned team funds that Pelotonia counts twice** · `e7c55e3`
@@ -37,8 +54,9 @@ Dates are commit dates (YYYY-MM-DD). Hashes are on `master`.
     `assigned = SUM(attributed − raised)`,
     `gap = reported − SUM(raised) − general funds`. If `gap ≥ 0.5 × assigned`,
     store `raised = reported − assigned`; otherwise store the reported figure.
-    The same amount comes off `all_time_raised`. The parent gets the summed
-    correction only when its own figure contains it, since it can lag.
+    The same amount came off `all_time_raised` too, which was wrong; see the
+    next entry. The parent gets the summed correction only when its own figure
+    contains it, since it can lag.
   - When Pelotonia fixes its totals, the gap falls to about zero and the
     dashboard uses their figures again without a code change.
   - New `teams` columns: `raised_reported`, `all_time_raised_reported`,

@@ -498,8 +498,13 @@ def correct_team_funds_double_count(conn):
     If Pelotonia fixes its totals the gap returns to ~0, nothing is subtracted,
     and the reported figures are used as they are.
 
-    Idempotent: always computed from raised_reported / all_time_raised_reported,
-    which scrape_teams() refreshes. Returns the total subtracted.
+    Only the current-year `raised` is corrected. Pelotonia's all-time figure is
+    computed separately and was not inflated: on 2026-10-23 the parent's raised
+    jumped $680K while its all-time didn't move. `all_time_raised` is always
+    the reported value.
+
+    Idempotent: always computed from raised_reported, which scrape_teams()
+    refreshes. Returns the total subtracted.
     """
     total = 0.0
     rows = conn.execute("""
@@ -514,10 +519,10 @@ def correct_team_funds_double_count(conn):
         fix = assigned if assigned >= 1 and gap >= 0.5 * assigned else 0.0
         conn.execute("""
             UPDATE teams SET raised = raised_reported - ?,
-                             all_time_raised = all_time_raised_reported - ?,
+                             all_time_raised = all_time_raised_reported,
                              double_count_correction = ?
             WHERE id = ?
-        """, (fix, fix, fix, tid))
+        """, (fix, fix, tid))
         if fix:
             log.info(f"  Double count: {name} reported ${reported:,.2f}, "
                      f"subtracting ${fix:,.2f} of assigned team funds")
@@ -537,10 +542,10 @@ def correct_team_funds_double_count(conn):
         parent_fix = total if total and parent_gap >= 0.5 * total else 0.0
         conn.execute("""
             UPDATE teams SET raised = raised_reported - ?,
-                             all_time_raised = all_time_raised_reported - ?,
+                             all_time_raised = all_time_raised_reported,
                              double_count_correction = ?
             WHERE id = ?
-        """, (parent_fix, parent_fix, parent_fix, PARENT_TEAM_ID))
+        """, (parent_fix, parent_fix, PARENT_TEAM_ID))
     if total:
         log.info(f"Corrected Pelotonia's double-counted team funds: -${total:,.2f}")
     else:

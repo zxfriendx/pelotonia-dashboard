@@ -46,10 +46,11 @@ def _team(conn, tid):
 
 
 def test_subtracts_assigned_funds_when_double_counted(conn):
+    """Current-year raised is corrected; all-time stays as reported (not inflated)."""
     _seed(conn, sub_reported=31_000)
     assert scraper.correct_team_funds_double_count(conn) == 3000
-    assert _team(conn, "sub1") == (28_000, 997_000, 3000)
-    assert _team(conn, PARENT) == (28_500, 997_500, 3000)
+    assert _team(conn, "sub1") == (28_000, 1_000_000, 3000)
+    assert _team(conn, PARENT) == (28_500, 1_000_500, 3000)
 
 
 def test_leaves_clean_totals_alone(conn):
@@ -74,4 +75,4 @@ def test_is_idempotent(conn):
     _seed(conn, sub_reported=31_000)
     scraper.correct_team_funds_double_count(conn)
     scraper.correct_team_funds_double_count(conn)
-    assert _team(conn, "sub1") == (28_000, 997_000, 3000)
+    assert _team(conn, "sub1") == (28_000, 1_000_000, 3000)

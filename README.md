@@ -359,7 +359,10 @@ else:                                        raised = reported
 
 The API's figures are kept in `teams.raised_reported` and
 `all_time_raised_reported`, and the amount subtracted in
-`double_count_correction`. The parent gets the summed correction only when its
+`double_count_correction`. Only the current-year total is corrected. Pelotonia
+computes all-time separately, and it was not inflated: on 2026-10-23 the
+parent's current-year total jumped $680K while its all-time figure didn't move.
+So All-Time Raised always shows Pelotonia's figure. The parent gets the summed correction only when its
 own figure contains it, since it can lag its sub-teams by a day. When Pelotonia
 fixes its totals, `gap` falls to about zero and the reported figures are used
 again with no code change. An ⓘ next to Raised explains the difference from
