@@ -26,7 +26,7 @@ Dates are commit dates (YYYY-MM-DD). Hashes are on `master`.
 
 ## 2026-10-23: Correct Pelotonia's double-counted team funds
 
-- **Scraper subtracts assigned team funds that Pelotonia counts twice** · this commit
+- **Scraper subtracts assigned team funds that Pelotonia counts twice** · `e7c55e3`
   - Between 2026-10-14 and 2026-10-23 Pelotonia changed each sub-team's total
     from `SUM(rider raised) + general funds` to `SUM(rider attributed) +
     general funds`. A rider's `attributed` includes team funds a captain
@@ -51,7 +51,7 @@ Dates are commit dates (YYYY-MM-DD). Hashes are on `master`.
     team's row and adds the same two fields to it.
   - Files: `app/pelotonia_scraper.py`, `app/dashboard.py`,
     `tests/test_double_count.py` (new), `tests/test_api_overview.py`
-- **ⓘ tooltip explaining the difference from pelotonia.org** · this commit
+- **ⓘ tooltip explaining the difference from pelotonia.org** · `e7c55e3`
   - Shown next to Raised (2026) and the Leaderboard's Huntington Raised only
     while a correction is active. New `InfoTip` component: opens on hover, focus
     or tap, and portals to `<body>` so flip cards can't clip it.
@@ -60,7 +60,7 @@ Dates are commit dates (YYYY-MM-DD). Hashes are on `master`.
     `frontend/src/styles/infotip.module.css`,
     `frontend/src/components/layout/KpiStrip.tsx`,
     `frontend/src/tabs/LeaderboardTab.tsx`, `frontend/src/types/index.ts`
-- **Commitments tab separates riders' own money from team credit** · this commit
+- **Commitments tab separates riders' own money from team credit** · `e7c55e3`
   - New **Team Credit** column (`credited − raised`, sortable, in the CSV).
   - New KPI **Filled by Team Funds**: commitment dollars covered by team credit
     ($861,188 on 2026-10-23), with an ⓘ explanation.
