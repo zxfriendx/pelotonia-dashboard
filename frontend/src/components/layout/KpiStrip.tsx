@@ -1,18 +1,21 @@
 import { useState, useCallback } from 'react';
+import type { ReactNode } from 'react';
 import styles from '../../styles/kpi.module.css';
 import { useDashboardStore } from '../../store/useDashboardStore';
 import { money, pct } from '../../utils/format';
+import { DoubleCountTip } from '../shared/DoubleCountTip';
 
 interface FlipCardProps {
   frontValue: string;
   frontLabel: string;
   frontSubText?: string;
+  frontInfo?: ReactNode;
   backValue: string;
   backLabel: string;
   shareText?: string;
 }
 
-function FlipCard({ frontValue, frontLabel, frontSubText, backValue, backLabel, shareText }: FlipCardProps) {
+function FlipCard({ frontValue, frontLabel, frontSubText, frontInfo, backValue, backLabel, shareText }: FlipCardProps) {
   const [flipped, setFlipped] = useState(false);
 
   const toggle = useCallback(() => setFlipped((f) => !f), []);
@@ -26,7 +29,7 @@ function FlipCard({ frontValue, frontLabel, frontSubText, backValue, backLabel, 
       <div className={styles.kpiInner}>
         <div className={styles.kpiFront}>
           <div className={styles.value}>{frontValue}</div>
-          <div className={styles.label}>{frontLabel}</div>
+          <div className={styles.label}>{frontLabel}{frontInfo}</div>
           {frontSubText && <div className={styles.kpiShare}>{frontSubText}</div>}
         </div>
         <div className={styles.kpiBack}>
@@ -81,6 +84,12 @@ export function KpiStrip() {
         frontValue={money(raised)}
         frontLabel={`Raised (2026)${goal ? ` of ${money(goal)}` : ''}`}
         frontSubText={kidsRaised > 0 ? `incl. ${money(kidsRaised)} Pelotonia Kids` : undefined}
+        frontInfo={
+          <DoubleCountTip
+            correction={overview.double_count_correction ?? 0}
+            reported={overview.raised_pelotonia_reported}
+          />
+        }
         backValue={tickerAvailable ? money(pelRaised) : 'N/A'}
         backLabel="All Pelotonia"
         shareText={tickerAvailable ? `${raisedSharePct}% of total` : undefined}

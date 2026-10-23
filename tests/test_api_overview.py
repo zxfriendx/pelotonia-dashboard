@@ -27,6 +27,8 @@ EXPECTED_FIELDS = {
     "general_peloton_funds",
     "first_year",
     "last_scraped",
+    "double_count_correction",
+    "raised_pelotonia_reported",
 }
 
 

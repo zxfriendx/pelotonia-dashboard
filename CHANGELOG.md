@@ -24,6 +24,54 @@ Dates are commit dates (YYYY-MM-DD). Hashes are on `master`.
 
 ---
 
+## 2026-10-23: Correct Pelotonia's double-counted team funds
+
+- **Scraper subtracts assigned team funds that Pelotonia counts twice** · this commit
+  - Between 2026-10-14 and 2026-10-23 Pelotonia changed each sub-team's total
+    from `SUM(rider raised) + general funds` to `SUM(rider attributed) +
+    general funds`. A rider's `attributed` includes team funds a captain
+    assigned to them, and those funds also stay in the team's general funds,
+    so they were counted twice: $702,455 by 2026-10-23. The visible effect was
+    a $646K jump in two days, of which only $69,705 was new money from riders.
+  - Rule, per sub-team on every scrape (`correct_team_funds_double_count()`):
+    `assigned = SUM(attributed − raised)`,
+    `gap = reported − SUM(raised) − general funds`. If `gap ≥ 0.5 × assigned`,
+    store `raised = reported − assigned`; otherwise store the reported figure.
+    The same amount comes off `all_time_raised`. The parent gets the summed
+    correction only when its own figure contains it, since it can lag.
+  - When Pelotonia fixes its totals, the gap falls to about zero and the
+    dashboard uses their figures again without a code change.
+  - New `teams` columns: `raised_reported`, `all_time_raised_reported`,
+    `double_count_correction`. Added by `init_db()` on the next scrape.
+  - One-time repair of `daily_snapshots` for 2026-10-14 to 2026-10-23, using
+    rider data from the nearest backup.
+  - Effect on 2026-10-23: Raised $6,884,759 → **$6,182,304**.
+  - `/api/overview` gains `double_count_correction` and
+    `raised_pelotonia_reported`. `/api/org-leaderboard` corrects the home
+    team's row and adds the same two fields to it.
+  - Files: `app/pelotonia_scraper.py`, `app/dashboard.py`,
+    `tests/test_double_count.py` (new), `tests/test_api_overview.py`
+- **ⓘ tooltip explaining the difference from pelotonia.org** · this commit
+  - Shown next to Raised (2026) and the Leaderboard's Huntington Raised only
+    while a correction is active. New `InfoTip` component: opens on hover, focus
+    or tap, and portals to `<body>` so flip cards can't clip it.
+  - Files: `frontend/src/components/shared/InfoTip.tsx`,
+    `frontend/src/components/shared/DoubleCountTip.tsx`,
+    `frontend/src/styles/infotip.module.css`,
+    `frontend/src/components/layout/KpiStrip.tsx`,
+    `frontend/src/tabs/LeaderboardTab.tsx`, `frontend/src/types/index.ts`
+- **Commitments tab separates riders' own money from team credit** · this commit
+  - New **Team Credit** column (`credited − raised`, sortable, in the CSV).
+  - New KPI **Filled by Team Funds**: commitment dollars covered by team credit
+    ($861,188 on 2026-10-23), with an ⓘ explanation.
+  - **Surplus** now counts only riders' own money above their commitment. It
+    had included team credit, which counts the team's money as rider
+    over-raising.
+  - API: members gain `team_credit`; the summary gains `total_team_credit` and
+    `covered_by_team_funds`; `surplus_total` uses the new rule.
+  - Files: `app/dashboard.py`, `frontend/src/tabs/CommitmentsTab.tsx`,
+    `frontend/src/types/index.ts`
+
 ## 2026-10-20: Pelotonia Kids no longer added twice; back to 3 scrapes a day
 
 - **Stop adding Pelotonia Kids on top of the official total** · `da0b60c`

@@ -4,6 +4,10 @@ export interface Overview {
   raised_tracked: number;
   raised_team_level: number;
   kids_raised?: number;
+  /** Team funds Pelotonia counts twice, already subtracted from `raised`. 0 when clean. */
+  double_count_correction?: number;
+  /** The total as pelotonia.org shows it (raised + double_count_correction). */
+  raised_pelotonia_reported?: number;
   goal: number;
   all_time_raised: number;
   members_count: number;
@@ -222,6 +226,8 @@ export interface OrgSnapshot {
   last_scraped: string;
   snapshot_date?: string;
   kids_raised?: number;
+  double_count_correction?: number;
+  raised_pelotonia_reported?: number;
 }
 
 export interface CommitmentMember {
@@ -232,6 +238,8 @@ export interface CommitmentMember {
   raised: number;
   /** max(raised, attributed) — what Pelotonia measures the commitment against. */
   credited: number;
+  /** Team funds a captain assigned to the rider (credited − raised). */
+  team_credit: number;
   shortfall: number;
   pct_fulfilled: number;
   committed_high_roller: number;
@@ -252,6 +260,8 @@ export interface CommitmentGap {
     total_committed: number;
     total_raised_by_committed: number;
     total_credited: number;
+    total_team_credit: number;
+    covered_by_team_funds: number;
     shortfall_total: number;
     surplus_total: number;
   };

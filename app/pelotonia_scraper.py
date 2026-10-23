@@ -94,6 +94,10 @@ def init_db(db_path=DB_PATH):
             all_time_raised REAL DEFAULT 0,
             total_raised_by_members REAL DEFAULT 0,
             general_peloton_funds REAL DEFAULT 0,
+            -- What the API reported, before correct_team_funds_double_count()
+            raised_reported REAL,
+            all_time_raised_reported REAL,
+            double_count_correction REAL DEFAULT 0,
             -- Meta
             last_scraped TEXT,
             current_event_name TEXT
@@ -279,6 +283,17 @@ def init_db(db_path=DB_PATH):
     except Exception:
         pass  # column already exists
 
+    # Migration: keep the API's reported totals beside the corrected ones
+    for col, decl in (("raised_reported", "REAL"), ("all_time_raised_reported", "REAL"),
+                      ("double_count_correction", "REAL DEFAULT 0")):
+        try:
+            conn.execute(f"ALTER TABLE teams ADD COLUMN {col} {decl}")
+        except Exception:
+            pass  # column already exists
+    conn.execute("UPDATE teams SET raised_reported = raised WHERE raised_reported IS NULL")
+    conn.execute("UPDATE teams SET all_time_raised_reported = all_time_raised "
+                 "WHERE all_time_raised_reported IS NULL")
+
     conn.commit()
     return conn
 
@@ -456,7 +471,81 @@ def scrape_teams(conn):
         ))
         log.info(f"  {detail['name']} — ${fr.get('raised', 0):,.0f} raised, {detail.get('membersCount', 0):.0f} members")
 
+    # Teams written this run hold the API's figures; remember them so
+    # correct_team_funds_double_count() always starts from what was reported.
+    conn.execute("""
+        UPDATE teams SET raised_reported = raised,
+                         all_time_raised_reported = all_time_raised,
+                         double_count_correction = 0
+        WHERE last_scraped = ?
+    """, (now,))
+
     return [PARENT_TEAM_ID] + team_ids
+
+
+def correct_team_funds_double_count(conn):
+    """Undo Pelotonia counting captain-assigned team funds twice.
+
+    Team money (general peloton funds) can be assigned by a captain to riders,
+    which raises each rider's `attributed` above their own `raised`. The money
+    stays in the team's general funds too. From 2026-10-22 Pelotonia's sub-team
+    total became SUM(rider attributed) + general funds, so assigned money is
+    counted once in each. Before that it was SUM(rider raised) + general funds.
+
+    For each sub-team, `gap = reported - SUM(raised) - general funds` holds what
+    the total has on top of riders' own money and the team's funds. When that
+    gap contains most of the assigned amount, the assigned amount is subtracted.
+    If Pelotonia fixes its totals the gap returns to ~0, nothing is subtracted,
+    and the reported figures are used as they are.
+
+    Idempotent: always computed from raised_reported / all_time_raised_reported,
+    which scrape_teams() refreshes. Returns the total subtracted.
+    """
+    total = 0.0
+    rows = conn.execute("""
+        SELECT t.id, t.name, t.raised_reported, COALESCE(t.general_peloton_funds, 0),
+               COALESCE(SUM(m.raised), 0), COALESCE(SUM(m.attributed - m.raised), 0)
+        FROM teams t LEFT JOIN members m ON m.team_id = t.id
+        WHERE t.parent_id = ? AND t.raised_reported IS NOT NULL
+        GROUP BY t.id
+    """, (PARENT_TEAM_ID,)).fetchall()
+    for tid, name, reported, gpf, own, assigned in rows:
+        gap = reported - own - gpf
+        fix = assigned if assigned >= 1 and gap >= 0.5 * assigned else 0.0
+        conn.execute("""
+            UPDATE teams SET raised = raised_reported - ?,
+                             all_time_raised = all_time_raised_reported - ?,
+                             double_count_correction = ?
+            WHERE id = ?
+        """, (fix, fix, fix, tid))
+        if fix:
+            log.info(f"  Double count: {name} reported ${reported:,.2f}, "
+                     f"subtracting ${fix:,.2f} of assigned team funds")
+        total += fix
+    # The parent's own figure sometimes lags its sub-teams by a day (on
+    # 2026-10-22 the sub-teams were inflated but the parent was not), so only
+    # subtract from it when it contains most of the sub-team corrections.
+    parent = conn.execute(
+        "SELECT raised_reported, COALESCE(general_peloton_funds, 0) FROM teams WHERE id = ?",
+        (PARENT_TEAM_ID,),
+    ).fetchone()
+    if parent and parent[0] is not None:
+        subs_corrected = conn.execute(
+            "SELECT COALESCE(SUM(raised), 0) FROM teams WHERE parent_id = ?", (PARENT_TEAM_ID,)
+        ).fetchone()[0]
+        parent_gap = parent[0] - subs_corrected - parent[1]
+        parent_fix = total if total and parent_gap >= 0.5 * total else 0.0
+        conn.execute("""
+            UPDATE teams SET raised = raised_reported - ?,
+                             all_time_raised = all_time_raised_reported - ?,
+                             double_count_correction = ?
+            WHERE id = ?
+        """, (parent_fix, parent_fix, parent_fix, PARENT_TEAM_ID))
+    if total:
+        log.info(f"Corrected Pelotonia's double-counted team funds: -${total:,.2f}")
+    else:
+        log.info("No double-counted team funds detected; using reported totals")
+    return total
 
 
 def scrape_rides_and_routes(conn):
@@ -844,6 +933,10 @@ def reconcile_donations(conn):
 def record_daily_snapshot(conn):
     """Record a daily snapshot of fundraising totals for historical tracking."""
     today = datetime.now(timezone.utc).strftime("%Y-%m-%d")
+
+    # Snapshots must hold corrected totals, so correct against this run's
+    # team and member data first.
+    correct_team_funds_double_count(conn)
 
     # Snapshot for parent team (overall totals)
     parent = conn.execute(
@@ -1347,6 +1440,7 @@ def main():
         team_ids = scrape_teams(conn)
 
     if args.teams_only:
+        correct_team_funds_double_count(conn)
         conn.commit()
         print_summary(conn)
         conn.close()

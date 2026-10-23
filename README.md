@@ -336,7 +336,36 @@ reconstruction for every org, so the Leaderboard matches the top bar.
 `tracked = SUM(members.raised)` and `team-level = official − tracked`. Team-level
 money is corporate or private gifts credited to a team, not to a person. Every
 "Funds Raised" figure shows "$X from members + $Y team-level". For a sub-team,
-`official` is that sub-team's own `teams.raised`.
+`official` is that sub-team's own `teams.raised`, corrected by rule 2a.
+
+**2a. Pelotonia's double-counted team funds.**
+A captain can assign a team's general funds to riders. That raises each rider's
+`attributed` above their own `raised`, and the money also stays in the team's
+general funds. From 2026-10-14 (a few small sub-teams) to 2026-10-23 (all of
+them), Pelotonia changed its sub-team total from `SUM(rider raised) + general
+funds` to `SUM(rider attributed) + general funds`. Its own `totalRaisedByMembers`
+field equals `SUM(rider attributed)`. Assigned money is therefore counted twice:
+$702,455 on 2026-10-23.
+
+`correct_team_funds_double_count()` in `pelotonia_scraper.py` handles this on
+every scrape, for each sub-team:
+
+```
+assigned = SUM(rider attributed − rider raised)
+gap      = reported total − SUM(rider raised) − general funds
+if assigned ≥ $1 and gap ≥ 0.5 × assigned:  raised = reported − assigned
+else:                                        raised = reported
+```
+
+The API's figures are kept in `teams.raised_reported` and
+`all_time_raised_reported`, and the amount subtracted in
+`double_count_correction`. The parent gets the summed correction only when its
+own figure contains it, since it can lag its sub-teams by a day. When Pelotonia
+fixes its totals, `gap` falls to about zero and the reported figures are used
+again with no code change. An ⓘ next to Raised explains the difference from
+pelotonia.org, and it shows only while a correction is active. The Leaderboard
+corrects the home team's row; other orgs are shown as Pelotonia reports them,
+because their riders aren't scraped.
 
 **3. Pelotonia Kids.**
 Kids money is raised on a separate platform (PledgeIt). Since 2026-10-20,
@@ -352,7 +381,11 @@ If `shortfall < 1`, the commitment counts as met. Pelotonia counts team funds
 assigned to a rider (`attributed`) toward the commitment and ignores gaps under
 $1. An audit of all 2,886 committed members on 2026-10-18 found this rule matches
 the API's `committedMet` flag for every member but one apparent manual waiver.
-Only on-team members with `committed_amount > 0` are included.
+Only on-team members with `committed_amount > 0` are included. The tab splits
+credited into the rider's own **Raised** and **Team Credit** (`credited −
+raised`, assigned team funds). "Filled by Team Funds" is the commitment dollars
+team credit covered. "Surplus" counts only riders' own money above their
+commitment, so team funds aren't counted twice there either.
 
 **5. Commitment trend chart.**
 Settled (non-pending) donations are replayed day by day against today's
@@ -627,6 +660,11 @@ tables on first run. Keep the old file as an archive.
 6. **Bundle cache has no lock** (see [Deployment](#deployment)).
 7. **The data goes stale on its own after the season.** The cron guard stops
    scraping, but the dates in `constants.ts` must be updated by hand each year.
+8. **Double-count correction relies on rider data.** Rule 2a needs this
+   scrape's rider `raised` and `attributed`. Snapshots from 2026-10-14 to
+   2026-10-22 were repaired once, using rider data from the nearest backup. The
+   parent team's own daily snapshot still wobbles on days its Pelotonia figure
+   lagged its sub-teams; the headline is built from sub-teams and is unaffected.
 
 ---
 

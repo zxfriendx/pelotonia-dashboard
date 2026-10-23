@@ -8,12 +8,13 @@ import { SearchBar } from '../components/shared/SearchBar';
 import { Pagination } from '../components/shared/Pagination';
 import { TabLoading } from '../components/shared/TabLoading';
 import { CommitmentGapChart } from '../components/charts/CommitmentGapChart';
+import { InfoTip } from '../components/shared/InfoTip';
 import type { CommitmentMember } from '../types';
 import tableStyles from '../styles/table.module.css';
 import layoutStyles from '../styles/layout.module.css';
 import kpiStyles from '../styles/kpi.module.css';
 
-type SortCol = 'name' | 'team' | 'committed' | 'raised' | 'credited' | 'shortfall' | 'pct';
+type SortCol = 'name' | 'team' | 'committed' | 'raised' | 'teamCredit' | 'credited' | 'shortfall' | 'pct';
 type SortDir = 'asc' | 'desc';
 type Filter = 'below' | 'all' | 'met';
 
@@ -51,6 +52,7 @@ export function CommitmentsTab() {
         case 'team': return dir * (shortTeam(a.team_name || '') || '').localeCompare(shortTeam(b.team_name || '') || '');
         case 'committed': return dir * (a.committed_amount - b.committed_amount);
         case 'raised': return dir * (a.raised - b.raised);
+        case 'teamCredit': return dir * (a.team_credit - b.team_credit);
         case 'credited': return dir * (a.credited - b.credited);
         case 'shortfall': return dir * (a.shortfall - b.shortfall);
         case 'pct': return dir * (a.pct_fulfilled - b.pct_fulfilled);
@@ -82,10 +84,10 @@ export function CommitmentsTab() {
     downloadCSV(
       filtered.map((m) => [
         m.public_id, m.name, shortTeam(m.team_name || '') || '',
-        m.committed_amount, m.raised, m.credited, m.shortfall, m.pct_fulfilled,
+        m.committed_amount, m.raised, m.team_credit, m.credited, m.shortfall, m.pct_fulfilled,
         m.committed_high_roller ? 'Yes' : '',
       ]),
-      ['Rider ID', 'Name', 'Sub-Team', 'Committed', 'Raised', 'Credited', 'Shortfall', '% Fulfilled', 'High Roller'],
+      ['Rider ID', 'Name', 'Sub-Team', 'Committed', 'Raised', 'Team Credit', 'Credited', 'Shortfall', '% Fulfilled', 'High Roller'],
       'commitment-gap.csv',
     );
   }, [filtered]);
@@ -112,8 +114,26 @@ export function CommitmentsTab() {
           <div className={kpiStyles.label}>$0 Credited</div>
         </div>
         <div className={kpiStyles.kpi}>
+          <div className={kpiStyles.value}>{money(s.covered_by_team_funds)}</div>
+          <div className={kpiStyles.label}>
+            Filled by Team Funds
+            <InfoTip label="What Filled by Team Funds means">
+              <p>
+                Commitment dollars covered by team money a captain assigned to riders, not by the
+                riders&apos; own fundraising. Pelotonia counts assigned funds toward a rider&apos;s
+                commitment, so this tab does too.
+              </p>
+              <p>
+                That money is already in the team&apos;s general funds, so it is not added to the team
+                total again. Pelotonia&apos;s site currently does add it, which double-counts it; see
+                the i next to Raised at the top of the page.
+              </p>
+            </InfoTip>
+          </div>
+        </div>
+        <div className={kpiStyles.kpi}>
           <div className={kpiStyles.value}>{money(s.surplus_total)}</div>
-          <div className={kpiStyles.label}>Surplus (Over-Raised)</div>
+          <div className={kpiStyles.label}>Surplus (Riders&apos; Own)</div>
         </div>
       </div>
 
@@ -184,8 +204,9 @@ export function CommitmentsTab() {
           />
 
           <div style={{ fontSize: 12, color: '#888', fontStyle: 'italic', marginBottom: 8 }}>
-            Credited is the larger of a member&apos;s own raised total and their attributed total,
-            which adds team funds Pelotonia assigns to them. Pelotonia measures commitments against it.
+            Raised is the rider&apos;s own fundraising. Team Credit is team money a captain assigned
+            to them. Credited is the total Pelotonia measures the commitment against. Surplus counts
+            only riders&apos; own money above their commitment.
           </div>
 
           <div style={{ overflowX: 'auto' }}>
@@ -204,6 +225,9 @@ export function CommitmentsTab() {
                   </th>
                   <th className={`text-right ${tableStyles.sortable}`} onClick={() => handleSort('raised')}>
                     Raised {sortCol === 'raised' ? (sortDir === 'asc' ? '▲' : '▼') : ''}
+                  </th>
+                  <th className={`text-right ${tableStyles.sortable}`} onClick={() => handleSort('teamCredit')}>
+                    Team Credit {sortCol === 'teamCredit' ? (sortDir === 'asc' ? '▲' : '▼') : ''}
                   </th>
                   <th className={`text-right ${tableStyles.sortable}`} onClick={() => handleSort('credited')}>
                     Credited {sortCol === 'credited' ? (sortDir === 'asc' ? '▲' : '▼') : ''}
@@ -233,6 +257,7 @@ export function CommitmentsTab() {
                     <td>{shortTeam(m.team_name || '') || '—'}</td>
                     <td className="text-right">{money(m.committed_amount)}</td>
                     <td className="text-right">{money(m.raised)}</td>
+                    <td className="text-right">{m.team_credit > 0 ? money(m.team_credit) : '—'}</td>
                     <td className="text-right">{money(m.credited)}</td>
                     <td className="text-right" style={{ color: m.shortfall > 0 ? '#c0392b' : '#1a5632', fontWeight: 600 }}>
                       {m.shortfall > 0 ? money(m.shortfall) : '✓ met'}

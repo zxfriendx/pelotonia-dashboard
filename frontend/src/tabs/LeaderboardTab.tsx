@@ -4,6 +4,7 @@ import { money, pct } from '../utils/format';
 import { PARENT_TEAM_ID, BRAND } from '../types/constants';
 import { type Column } from '../components/shared/DataTable';
 import { OrgRaisedChart } from '../components/charts/OrgRaisedChart';
+import { DoubleCountTip } from '../components/shared/DoubleCountTip';
 import type { OrgSnapshot } from '../types';
 import kpiStyles from '../styles/kpi.module.css';
 import layoutStyles from '../styles/layout.module.css';
@@ -83,7 +84,13 @@ export function LeaderboardTab() {
         </div>
         <div className={kpiStyles.kpi}>
           <div className={kpiStyles.value}>{money(huntington?.raised || 0)}</div>
-          <div className={kpiStyles.label}>Huntington Raised</div>
+          <div className={kpiStyles.label}>
+            Huntington Raised
+            <DoubleCountTip
+              correction={huntington?.double_count_correction ?? 0}
+              reported={huntington?.raised_pelotonia_reported}
+            />
+          </div>
           {(huntington?.kids_raised ?? 0) > 0 && (
             <div className={kpiStyles.kpiShare}>incl. {money(huntington?.kids_raised ?? 0)} Pelotonia Kids</div>
           )}

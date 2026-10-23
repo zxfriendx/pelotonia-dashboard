@@ -75,6 +75,16 @@ def _get_overview(conn):
     ).fetchone()["s"]
     parent_gpf = parent["general_peloton_funds"] if parent else 0
     official_raised = subteam_raised + parent_gpf
+    # Team funds Pelotonia counts twice, already subtracted from teams.raised by
+    # the scraper (correct_team_funds_double_count). 0 when Pelotonia's totals
+    # are clean, which hides the explanation in the UI.
+    try:
+        double_count = conn.execute(
+            "SELECT COALESCE(SUM(double_count_correction),0) as s FROM teams WHERE parent_id=?",
+            (PARENT_TEAM_ID,),
+        ).fetchone()["s"]
+    except sqlite3.OperationalError:  # DB not yet migrated by the scraper
+        double_count = 0
     # "Tracked" = donations attributed to individual members.
     tracked_raised = conn.execute(
         "SELECT COALESCE(SUM(raised),0) as s FROM members WHERE team_id IS NOT NULL",
@@ -118,6 +128,8 @@ def _get_overview(conn):
         "raised": official_raised,
         "raised_tracked": tracked_raised,
         "raised_team_level": team_level_raised,
+        "double_count_correction": double_count,
+        "raised_pelotonia_reported": official_raised + double_count,
         "kids_raised": kids_raised,
         "goal": parent["goal"] if parent else 0,
         "all_time_raised": parent["all_time_raised"] if parent else 0,
@@ -691,11 +703,31 @@ def _get_org_leaderboard(conn):
         "SELECT estimated_amount_raised FROM kids_snapshots ORDER BY snapshot_date DESC LIMIT 1"
     ).fetchone()
     kids_raised = kids_row["estimated_amount_raised"] if kids_row else 0
-    if kids_raised:
-        for r in out:
-            if r["team_id"] == PARENT_TEAM_ID:
+    # org_scraper reads Pelotonia's totals directly, so Huntington's row still
+    # carries the double-counted team funds; subtract the correction the main
+    # scraper computed from rider data so the row matches the top bar. Other
+    # orgs stay as Pelotonia reports them (their riders aren't scraped).
+    try:
+        # org_scraper rebuilds the row from sub-team totals, so subtract the
+        # sub-team corrections (the parent's own figure can lag them).
+        correction = conn.execute(
+            "SELECT COALESCE(SUM(double_count_correction), 0) FROM teams WHERE parent_id=?",
+            (PARENT_TEAM_ID,),
+        ).fetchone()[0]
+    except sqlite3.OperationalError:  # DB not yet migrated by the scraper
+        correction = 0
+    for r in out:
+        if r["team_id"] == PARENT_TEAM_ID:
+            if kids_raised:
                 r["kids_raised"] = kids_raised
-                break
+            if correction:
+                r["raised_pelotonia_reported"] = r["raised"]
+                r["double_count_correction"] = correction
+                r["raised"] -= correction
+                r["all_time_raised"] -= correction
+            break
+    if correction:
+        out.sort(key=lambda r: -(r["raised"] or 0))
     return out
 
 
@@ -721,7 +753,8 @@ def _get_commitment_gap(conn):
     """).fetchall()
     members = []
     for r in rows:
-        credited = max(r["raised"] or 0, r["attributed"] or 0)
+        own = r["raised"] or 0
+        credited = max(own, r["attributed"] or 0)
         shortfall = r["committed_amount"] - credited
         # Pelotonia marks a commitment met when it is short by under $1
         # (e.g. $1,249.67 on $1,250), so treat sub-dollar gaps as met.
@@ -731,8 +764,11 @@ def _get_commitment_gap(conn):
             "name": r["name"],
             "team_name": r["team_name"],
             "committed_amount": r["committed_amount"],
-            "raised": r["raised"],
+            "raised": own,
             "credited": credited,
+            # Team funds a captain assigned to this rider. They count toward the
+            # commitment but are already in the team's general funds.
+            "team_credit": credited - own,
             "shortfall": shortfall,
             "pct_fulfilled": round(min(credited / r["committed_amount"], 1) * 100, 1),
             "committed_high_roller": r["committed_high_roller"],
@@ -747,9 +783,16 @@ def _get_commitment_gap(conn):
         "total_committed": sum(m["committed_amount"] for m in members),
         "total_raised_by_committed": sum(m["raised"] for m in members),
         "total_credited": sum(m["credited"] for m in members),
+        "total_team_credit": sum(m["team_credit"] for m in members),
+        # Commitment dollars filled by assigned team funds rather than the
+        # rider's own fundraising.
+        "covered_by_team_funds": sum(
+            max(min(m["credited"], m["committed_amount"]) - min(m["raised"], m["committed_amount"]), 0)
+            for m in members),
         "shortfall_total": sum(m["shortfall"] for m in members),
-        "surplus_total": sum(m["credited"] - m["committed_amount"]
-                             for m in members if m["shortfall"] == 0),
+        # Riders' own money above their commitment. Team funds are left out:
+        # they are the team's money, already counted in its general funds.
+        "surplus_total": sum(max(m["raised"] - m["committed_amount"], 0) for m in members),
     }
 
     # Timeline: replay tracked donations against current commitments.
